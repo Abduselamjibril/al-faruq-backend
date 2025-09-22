@@ -15,11 +15,18 @@ import { PurchaseModule } from './purchase/purchase.module';
 import { FeedModule } from './feed/feed.module';
 import { UploadModule } from './upload/upload.module';
 import { dataSourceOptions } from './data-source';
+import { YoutubeModule } from './youtube/youtube.module';
+import { CacheModule } from '@nestjs/cache-manager';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+    }),
+
+    CacheModule.register({
+      isGlobal: true, // Makes the cache manager available application-wide
+      ttl: 3600 * 1000, // Time-to-live for cache entries in milliseconds. 3600 seconds = 1 hour
     }),
     // --- THIS IS THE FIX ---
     // The path now correctly points to the 'uploads' folder in the project root.
@@ -39,6 +46,7 @@ import { dataSourceOptions } from './data-source';
     PurchaseModule,
     FeedModule,
     UploadModule,
+    YoutubeModule,
   ],
   controllers: [AppController],
   providers: [AppService],
