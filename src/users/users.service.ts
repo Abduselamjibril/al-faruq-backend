@@ -22,12 +22,33 @@ export class UsersService {
   }
 
   async findByPhoneNumber(phoneNumber: string): Promise<User | undefined> {
-    return (await this.usersRepository.findOne({ where: { phoneNumber } })) ?? undefined;
+    return (
+      (await this.usersRepository.findOne({ where: { phoneNumber } })) ??
+      undefined
+    );
   }
 
   async findById(id: number): Promise<User | undefined> {
     return (await this.usersRepository.findOne({ where: { id } })) ?? undefined;
   }
+
+  // --- NEW METHOD FOR SSO ---
+  async findByProviderId(
+    provider: 'google' | 'facebook',
+    providerId: string,
+  ): Promise<User | undefined> {
+    let whereCondition: any = {};
+    if (provider === 'google') {
+      whereCondition = { googleId: providerId };
+    } else if (provider === 'facebook') {
+      whereCondition = { facebookId: providerId };
+    } else {
+      return undefined; // Or throw an error for unsupported providers
+    }
+    return (await this.usersRepository.findOne({ where: whereCondition })) ?? undefined;
+  }
+  // --- END OF NEW METHOD ---
+
 
   async findByLoginIdentifier(identifier: string): Promise<User | undefined> {
     const isEmail = identifier.includes('@');

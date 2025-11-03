@@ -17,6 +17,7 @@ import { UploadModule } from './upload/upload.module';
 import { dataSourceOptions } from './data-source';
 import { YoutubeModule } from './youtube/youtube.module';
 import { CacheModule } from '@nestjs/cache-manager';
+import { SeedModule } from './database/seed.module'; // <-- 1. IMPORT SeedModule
 
 @Module({
   imports: [
@@ -28,17 +29,14 @@ import { CacheModule } from '@nestjs/cache-manager';
       isGlobal: true, // Makes the cache manager available application-wide
       ttl: 3600 * 1000, // Time-to-live for cache entries in milliseconds. 3600 seconds = 1 hour
     }),
-    // --- THIS IS THE FIX ---
-    // The path now correctly points to the 'uploads' folder in the project root.
-    // process.cwd() gives the root directory where the 'node' command was started.
+
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), 'uploads'),
       serveRoot: '/uploads',
     }),
-    
-    // We use our single, consolidated configuration for TypeORM
+
     TypeOrmModule.forRoot(dataSourceOptions),
-    
+
     UsersModule,
     AuthModule,
     MailModule,
@@ -47,6 +45,7 @@ import { CacheModule } from '@nestjs/cache-manager';
     FeedModule,
     UploadModule,
     YoutubeModule,
+    SeedModule, // <-- 2. ADD SeedModule TO IMPORTS
   ],
   controllers: [AppController],
   providers: [AppService],

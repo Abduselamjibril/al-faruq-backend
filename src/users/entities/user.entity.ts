@@ -1,8 +1,16 @@
 // src/users/entities/user.entity.ts
 
 import { Exclude } from 'class-transformer';
-import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Column,
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  OneToMany,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
 import { Purchase } from '../../purchase/entities/purchase.entity';
+import { Role } from '../../roles/entities/role.entity'; // <-- 1. IMPORT the new Role entity
 
 export enum AuthProvider {
   LOCAL = 'LOCAL',
@@ -55,7 +63,12 @@ export class User {
   @Exclude()
   otpExpiresAt: Date | null;
 
-  // --- NEW RELATIONSHIP ADDED BELOW ---
+  // --- ROLE RELATIONSHIP ADDED BELOW ---
+  @ManyToOne(() => Role, (role) => role.users, { eager: true, cascade: true }) // 2. DEFINE the many-to-one relationship
+  @JoinColumn({ name: 'roleId' }) // 3. SPECIFY the foreign key column
+  role: Role;
+
+  // --- EXISTING RELATIONSHIP ---
   @OneToMany(() => Purchase, (purchase) => purchase.user)
   purchases: Purchase[];
 }

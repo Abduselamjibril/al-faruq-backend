@@ -3,6 +3,8 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { SeedService } from './database/seed.service';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'; // <-- 1. IMPORT SWAGGER MODULES
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -10,27 +12,37 @@ async function bootstrap() {
   // Set a global prefix for all routes, e.g., /api
   app.setGlobalPrefix('api');
 
-  // --- THIS IS THE FIX ---
-  // We use a regular expression for the origin.
-  // This allows 'http://localhost:5173' AND your Flutter app on any port
-  // (e.g., 'http://localhost:54321') to make requests.
   app.enableCors({
     origin: /localhost:\d+$/, // Matches localhost on any port
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
   });
 
-  // Enable global validation for all incoming DTOs
-  app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,
-    forbidNonWhitelisted: true,
-    transform: true,
-    transformOptions: {
-      enableImplicitConversion: true,
-    },
-  }));
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      transformOptions: {
+        enableImplicitConversion: true,
+      },
+    }),
+  );
 
-  // The redundant app.enableCors() call has been removed.
+  // --- 2. SWAGGER (OPENAPI) SETUP ---
+  const config = new DocumentBuilder()
+    .setTitle('Alfaruq API')
+    .setDescription('The official API documentation for the Alfaruq application.')
+    .setVersion('1.0')
+    .addBearerAuth() // This is important for routes that require a JWT
+    .build();
+
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api-docs', app, document); // Your docs will be at http://localhost:3000/api-docs
+  // --- END OF SWAGGER SETUP ---
+
+  const seeder = app.get(SeedService);
+  await seeder.seedDatabase();
 
   await app.listen(3000);
 }
