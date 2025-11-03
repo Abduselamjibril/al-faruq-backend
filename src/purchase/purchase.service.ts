@@ -1,3 +1,5 @@
+// src/purchase/purchase.service.ts
+
 import {
   BadRequestException,
   Injectable,
@@ -10,27 +12,28 @@ import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
 import { firstValueFrom } from 'rxjs';
 import { randomBytes } from 'crypto';
-import { AxiosResponse } from 'axios'; // <-- Import AxiosResponse
+import { AxiosResponse } from 'axios';
 
 import { Purchase } from './entities/purchase.entity';
 import { Content } from '../content/entities/content.entity';
 import { User } from '../users/entities/user.entity';
 import { InitiatePurchaseDto } from './dto/initiate-purchase.dto';
+import { PendingTransaction } from './entities/pending-transaction.entity';
 
-// --- NEW: Define an interface for the Chapa response shape ---
 interface ChapaTransactionResponse {
   message: string;
   status: string;
   data: {
-    checkout_url?: string; // For initialization
-    // Add other potential fields from verification response if needed
-    amount?: number; 
+    checkout_url?: string;
+    amount?: number;
   };
 }
 
 @Injectable()
 export class PurchaseService {
   private readonly chapaSecretKey: string;
+  private readonly apiDomain: string;
+  private readonly flutterReturnUrl: string;
 
   constructor(
     @InjectRepository(Purchase)
@@ -39,13 +42,26 @@ export class PurchaseService {
     private readonly contentRepository: Repository<Content>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(PendingTransaction)
+    private readonly pendingTransactionRepository: Repository<PendingTransaction>,
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
   ) {
-    this.chapaSecretKey = this.configService.get<string>('CHAPA_SECRET_KEY')!;
-    if (!this.chapaSecretKey) {
-      throw new Error('CHAPA_SECRET_KEY is not defined in environment variables');
+    // --- START OF THE FIX ---
+    const secretKey = this.configService.get<string>('CHAPA_SECRET_KEY');
+    const domain = this.configService.get<string>('API_DOMAIN');
+    const returnUrl = this.configService.get<string>('FLUTTER_RETURN_URL');
+
+    if (!secretKey || !domain || !returnUrl) {
+      throw new Error(
+        'CHAPA_SECRET_KEY, API_DOMAIN, or FLUTTER_RETURN_URL are not defined in environment variables',
+      );
     }
+
+    this.chapaSecretKey = secretKey;
+    this.apiDomain = domain;
+    this.flutterReturnUrl = returnUrl;
+    // --- END OF THE FIX ---
   }
 
   async initiatePurchase(
@@ -68,7 +84,9 @@ export class PurchaseService {
       throw new NotFoundException(`Content with ID ${contentId} not found.`);
     }
     if (!content.isLocked || !content.pricingTier) {
-      throw new BadRequestException('This content is not available for purchase.');
+      throw new BadRequestException(
+        'This content is not available for purchase.',
+      );
     }
 
     const price = this.calculatePrice(content.pricingTier, durationDays);
@@ -76,27 +94,27 @@ export class PurchaseService {
       throw new BadRequestException('Invalid duration or price calculation.');
     }
 
-    const tx_ref = `alfaruq-${userId}-${contentId}-${randomBytes(8).toString('hex')}`;
+    const tx_ref = `alfaruq-${userId}-${contentId}-${randomBytes(8).toString(
+      'hex',
+    )}`;
 
     const chapaRequestBody = {
       amount: price.toString(),
       currency: 'ETB',
-      // --- FIX: Provide fallback for potentially null user properties ---
-      email: user.email || '', 
+      email: user.email || '',
       first_name: user.firstName || '',
       last_name: user.lastName || '',
       tx_ref: tx_ref,
-      callback_url: `https://YOUR_API_DOMAIN/purchase/chapa-webhook`,
-      return_url: `https://YOUR_FLUTTER_APP_DEEPLINK/purchase-success`,
+      callback_url: `${this.apiDomain}/purchase/chapa-webhook`,
+      return_url: this.flutterReturnUrl,
       'customization[title]': 'Al-Faruq Content Purchase',
       'customization[description]': `Payment for ${content.title}`,
     };
 
     try {
-      // --- FIX: Type the expected response from the HTTP call ---
       const response = await firstValueFrom(
         this.httpService.post<ChapaTransactionResponse>(
-          'https://api.chapa.co/v1/transaction/initialize',
+          'https://api.chaa.co/v1/transaction/initialize',
           chapaRequestBody,
           {
             headers: { Authorization: `Bearer ${this.chapaSecretKey}` },
@@ -104,15 +122,28 @@ export class PurchaseService {
         ),
       );
 
-      if (response.data.status !== 'success' || !response.data.data?.checkout_url) {
-        throw new InternalServerErrorException('Failed to initialize Chapa transaction.');
+      if (
+        response.data.status !== 'success' ||
+        !response.data.data?.checkout_url
+      ) {
+        throw new InternalServerErrorException(
+          'Failed to initialize Chapa transaction.',
+        );
       }
-      
-      return { checkoutUrl: response.data.data.checkout_url };
 
+      const pendingTx = this.pendingTransactionRepository.create({
+        tx_ref: tx_ref,
+        durationDays: durationDays,
+      });
+      await this.pendingTransactionRepository.save(pendingTx);
+
+      return { checkoutUrl: response.data.data.checkout_url };
     } catch (error) {
       const axiosError = error as { response?: AxiosResponse };
-      console.error('Chapa Initialization Error:', axiosError.response?.data || error.message);
+      console.error(
+        'Chapa Initialization Error:',
+        axiosError.response?.data || error.message,
+      );
       throw new InternalServerErrorException('Could not initiate payment.');
     }
   }
@@ -121,12 +152,12 @@ export class PurchaseService {
     const { basePrice, baseDurationDays, additionalTiers } = pricingTier;
 
     if (durationDays < baseDurationDays) {
-      return 0; 
+      return 0;
     }
-    
+
     let totalPrice = basePrice;
     let remainingDays = durationDays - baseDurationDays;
-    
+
     if (remainingDays > 0 && additionalTiers) {
       const sortedTiers = [...additionalTiers].sort((a, b) => a.days - b.days);
       for (const tier of sortedTiers) {
@@ -137,33 +168,38 @@ export class PurchaseService {
         }
       }
     }
-    return parseFloat(totalPrice);
+    return parseFloat(totalPrice.toString());
   }
 
   async verifyAndGrantAccess(chapaResponse: any): Promise<void> {
     const { tx_ref } = chapaResponse;
-    
     if (!tx_ref) {
       console.warn('Chapa webhook called without tx_ref');
       return;
     }
-    
-    try {
-      // --- FIX: Type the expected response from the HTTP call ---
-      const verificationResponse = await firstValueFrom(
-        this.httpService.get<ChapaTransactionResponse>(`https://api.chapa.co/v1/transaction/verify/${tx_ref}`, {
-          headers: { Authorization: `Bearer ${this.chapaSecretKey}` },
-        }),
+
+    const pendingTx = await this.pendingTransactionRepository.findOneBy({
+      tx_ref,
+    });
+    if (!pendingTx) {
+      console.warn(
+        `Webhook for unknown or already processed tx_ref received: ${tx_ref}`,
       );
-      
+      return;
+    }
+
+    try {
+      const verificationResponse = await firstValueFrom(
+        this.httpService.get<ChapaTransactionResponse>(
+          `https://api.chapa.co/v1/transaction/verify/${tx_ref}`,
+          {
+            headers: { Authorization: `Bearer ${this.chapaSecretKey}` },
+          },
+        ),
+      );
+
       if (verificationResponse.data.status !== 'success') {
         console.error(`Chapa verification failed for tx_ref: ${tx_ref}`);
-        return;
-      }
-
-      const existingPurchase = await this.purchaseRepository.findOneBy({ chapaTransactionId: tx_ref });
-      if (existingPurchase) {
-        console.log(`Transaction ${tx_ref} has already been processed. Ignoring webhook.`);
         return;
       }
 
@@ -175,15 +211,16 @@ export class PurchaseService {
       const content = await this.contentRepository.findOneBy({ id: contentId });
 
       if (!user || !content) {
-        console.error(`Invalid user or content ID parsed from tx_ref: ${tx_ref}`);
+        console.error(
+          `Invalid user or content ID parsed from tx_ref: ${tx_ref}`,
+        );
         return;
       }
 
-      const purchasedDurationDays = 15; // <-- !!! PLACEHOLDER: NEEDS PROPER IMPLEMENTATION
-
+      const purchasedDurationDays = pendingTx.durationDays;
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + purchasedDurationDays);
-      
+
       const newPurchase = this.purchaseRepository.create({
         user: user,
         content: content,
@@ -193,11 +230,16 @@ export class PurchaseService {
       });
 
       await this.purchaseRepository.save(newPurchase);
-      console.log(`Access granted to user ${userId} for content ${contentId}`);
 
+      await this.pendingTransactionRepository.remove(pendingTx);
+
+      console.log(`Access granted to user ${userId} for content ${contentId}`);
     } catch (error) {
-        const axiosError = error as { response?: AxiosResponse };
-        console.error('Chapa Verification/Granting Error:', axiosError.response?.data || error.message);
+      const axiosError = error as { response?: AxiosResponse };
+      console.error(
+        'Chapa Verification/Granting Error:',
+        axiosError.response?.data || error.message,
+      );
     }
   }
 }

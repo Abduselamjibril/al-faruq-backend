@@ -10,7 +10,8 @@ import {
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { Purchase } from '../../purchase/entities/purchase.entity';
-import { Role } from '../../roles/entities/role.entity'; // <-- 1. IMPORT the new Role entity
+import { Role } from '../../roles/entities/role.entity';
+import { Device } from '../../devices/entities/device.entity'; // <-- 1. IMPORT Device entity
 
 export enum AuthProvider {
   LOCAL = 'LOCAL',
@@ -63,12 +64,14 @@ export class User {
   @Exclude()
   otpExpiresAt: Date | null;
 
-  // --- ROLE RELATIONSHIP ADDED BELOW ---
-  @ManyToOne(() => Role, (role) => role.users, { eager: true, cascade: true }) // 2. DEFINE the many-to-one relationship
-  @JoinColumn({ name: 'roleId' }) // 3. SPECIFY the foreign key column
+  @ManyToOne(() => Role, (role) => role.users, { eager: true, cascade: true })
+  @JoinColumn({ name: 'roleId' })
   role: Role;
 
-  // --- EXISTING RELATIONSHIP ---
   @OneToMany(() => Purchase, (purchase) => purchase.user)
   purchases: Purchase[];
+  
+  // --- NEW DEVICE RELATIONSHIP ADDED BELOW ---
+  @OneToMany(() => Device, (device) => device.user) // <-- 2. DEFINE the one-to-many relationship
+  devices: Device[];
 }

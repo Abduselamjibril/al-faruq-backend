@@ -17,17 +17,23 @@ import { UploadModule } from './upload/upload.module';
 import { dataSourceOptions } from './data-source';
 import { YoutubeModule } from './youtube/youtube.module';
 import { CacheModule } from '@nestjs/cache-manager';
-import { SeedModule } from './database/seed.module'; // <-- 1. IMPORT SeedModule
+import { SeedModule } from './database/seed.module';
+import { FirebaseModule } from './firebase/firebase.module';
+import { DevicesModule } from './devices/devices.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { RemindersModule } from './reminders/reminders.module'; // <-- 1. IMPORT RemindersModule
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    ScheduleModule.forRoot(),
 
     CacheModule.register({
-      isGlobal: true, // Makes the cache manager available application-wide
-      ttl: 3600 * 1000, // Time-to-live for cache entries in milliseconds. 3600 seconds = 1 hour
+      isGlobal: true,
+      ttl: 3600 * 1000,
     }),
 
     ServeStaticModule.forRoot({
@@ -37,6 +43,7 @@ import { SeedModule } from './database/seed.module'; // <-- 1. IMPORT SeedModule
 
     TypeOrmModule.forRoot(dataSourceOptions),
 
+    // Application Modules
     UsersModule,
     AuthModule,
     MailModule,
@@ -45,7 +52,11 @@ import { SeedModule } from './database/seed.module'; // <-- 1. IMPORT SeedModule
     FeedModule,
     UploadModule,
     YoutubeModule,
-    SeedModule, // <-- 2. ADD SeedModule TO IMPORTS
+    SeedModule,
+    FirebaseModule,
+    DevicesModule,
+    NotificationsModule,
+    RemindersModule, // <-- 2. ADD RemindersModule
   ],
   controllers: [AppController],
   providers: [AppService],

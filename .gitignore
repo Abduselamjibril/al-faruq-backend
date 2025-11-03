@@ -2,7 +2,7 @@
 /dist
 /node_modules
 /build
-
+firebase-service-account.json.json
 # Logs
 logs
 *.log

@@ -7,6 +7,10 @@ import { User } from '../users/entities/user.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
+import {
+  ReminderSetting,
+  ReminderId,
+} from '../reminders/entities/reminder-setting.entity'; // <-- 1. IMPORT Reminder entities
 
 @Injectable()
 export class SeedService {
@@ -17,6 +21,8 @@ export class SeedService {
     private readonly roleRepository: Repository<Role>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(ReminderSetting) // <-- 2. INJECT ReminderSetting repository
+    private readonly reminderSettingRepository: Repository<ReminderSetting>,
     private readonly configService: ConfigService,
   ) {}
 
@@ -25,9 +31,48 @@ export class SeedService {
 
     await this.seedRoles();
     await this.seedAdminUser();
+    await this.seedReminderSettings(); // <-- 3. CALL the new seeder method
 
     this.logger.log('Database seeding finished.');
   }
+
+  // --- NEW SEEDER METHOD FOR REMINDERS ---
+  private async seedReminderSettings() {
+    const remindersToSeed: Partial<ReminderSetting>[] = [
+      {
+        id: ReminderId.JUMUAH,
+        isEnabled: false,
+        message: "Don't forget to read Surah Al-Kahf. Jumu'ah Mubarak!",
+        time: '12:00',
+        dayOfWeek: 5, // Friday
+        timeZone: 'Africa/Addis_Ababa',
+      },
+      {
+        id: ReminderId.KHAMIS,
+        isEnabled: false,
+        message:
+          'The Messenger of Allah (ﷺ) said: "The best of your days is Friday. So send a great deal of salah upon me on that day, for your salah will be presented to me."',
+        time: '18:30',
+        dayOfWeek: 4, // Thursday
+        timeZone: 'Africa/Addis_Ababa',
+      },
+    ];
+
+    for (const reminderData of remindersToSeed) {
+      const reminderExists = await this.reminderSettingRepository.findOneBy({
+        id: reminderData.id,
+      });
+
+      if (!reminderExists) {
+        const newReminder = this.reminderSettingRepository.create(reminderData);
+        await this.reminderSettingRepository.save(newReminder);
+        this.logger.log(`Reminder setting '${reminderData.id}' created.`);
+      } else {
+        this.logger.log(`Reminder setting '${reminderData.id}' already exists.`);
+      }
+    }
+  }
+  // --- END OF NEW METHOD ---
 
   private async seedRoles() {
     const rolesToSeed = [RoleName.ADMIN, RoleName.USER];
@@ -51,7 +96,9 @@ export class SeedService {
     const adminPassword = this.configService.get<string>('ADMIN_PASSWORD');
 
     if (!adminEmail || !adminPassword) {
-      this.logger.error('ADMIN_EMAIL or ADMIN_PASSWORD not found in .env file. Skipping admin user seed.');
+      this.logger.error(
+        'ADMIN_EMAIL or ADMIN_PASSWORD not found in .env file. Skipping admin user seed.',
+      );
       return;
     }
 
@@ -69,7 +116,9 @@ export class SeedService {
     });
 
     if (!adminRole) {
-      this.logger.error("ADMIN role not found. Cannot create admin user. Make sure roles are seeded first.");
+      this.logger.error(
+        'ADMIN role not found. Cannot create admin user. Make sure roles are seeded first.',
+      );
       return;
     }
 
@@ -80,7 +129,7 @@ export class SeedService {
       password: hashedPassword,
       firstName: 'Admin',
       lastName: 'User',
-      phoneNumber: '0000000000', // A placeholder phone number
+      phoneNumber: '0000000000',
       agreedToTerms: true,
       role: adminRole,
     });

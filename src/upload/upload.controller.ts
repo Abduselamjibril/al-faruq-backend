@@ -1,85 +1,118 @@
+// src/upload/upload.controller.ts
+
 import {
   Controller,
   Post,
   UploadedFile,
   UseInterceptors,
   BadRequestException,
+  UseGuards,
+  ParseFilePipe,
+  MaxFileSizeValidator,
+  FileTypeValidator,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
 import type { Express } from 'express';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { RoleName } from '../roles/entities/role.entity';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+import { UploadService } from './upload.service';
 
-// Helper function to create unique filenames
-const generateFilename = (req, file, callback) => {
-  const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-  const extension = extname(file.originalname);
-  const filename = `${file.originalname.split('.')[0]}-${uniqueSuffix}${extension}`;
-  callback(null, filename);
-};
-
-// Helper function for image file filter
-const imageFileFilter = (req, file, callback) => {
-  if (!file.originalname.match(/\.(jpg|jpeg|png|gif)$/)) {
-    return callback(new Error('Only image files are allowed!'), false);
-  }
-  callback(null, true);
-};
-
-// Helper function for video file filter
-const videoFileFilter = (req, file, callback) => {
-  if (!file.mimetype.match(/\/(mp4|x-matroska|quicktime|x-msvideo)$/)) {
-    return callback(new Error('Only video files are allowed!'), false);
-  }
-  callback(null, true);
-};
-
-
+@ApiTags('Upload (Admin)')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(RoleName.ADMIN)
 @Controller('upload')
 export class UploadController {
-  
+  constructor(private readonly uploadService: UploadService) {}
+
   @Post('video')
-  @UseInterceptors(
-    FileInterceptor('video', {
-      storage: diskStorage({
-        destination: './uploads/videos',
-        filename: generateFilename,
+  @ApiOperation({ summary: 'Upload a video file' })
+  @ApiResponse({
+    status: 201,
+    description: 'Video uploaded successfully. Returns the cloud URL.',
+  })
+  @ApiResponse({ status: 400, description: 'No file uploaded or invalid file type.' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        video: {
+          type: 'string',
+          format: 'binary',
+          description: 'The video file to upload (e.g., mp4, mkv, mov). Max 5GB.',
+        },
+      },
+    },
+  })
+  @UseInterceptors(FileInterceptor('video'))
+  async uploadVideo(
+    @UploadedFile(
+      // Use built-in NestJS pipes for validation instead of multer options for better error handling and Swagger integration
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 * 1024 }), // 5GB
+          new FileTypeValidator({ fileType: 'video/*' }),
+        ],
       }),
-      fileFilter: videoFileFilter,
-      limits: { fileSize: 5 * 1024 * 1024 * 1024 }, // 5GB
-    }),
-  )
-  uploadVideo(@UploadedFile() file: Express.Multer.File) {
-    if (!file) {
-      throw new BadRequestException('No video file uploaded.');
-    }
-    const fileUrl = `http://localhost:3000/uploads/videos/${file.filename}`;
+    )
+    file: Express.Multer.File,
+  ) {
+    const result = await this.uploadService.uploadFile(file, 'video');
     return {
-      message: 'Video uploaded successfully',
-      url: fileUrl,
+      message: 'Video uploaded successfully to cloud',
+      url: result.url,
+      provider_id: result.provider_id,
     };
   }
 
-  // --- NEW ENDPOINT FOR THUMBNAILS ---
   @Post('thumbnail')
-  @UseInterceptors(
-    FileInterceptor('thumbnail', { // Expects a form field named 'thumbnail'
-      storage: diskStorage({
-        destination: './uploads/thumbnails', // Save to the new folder
-        filename: generateFilename,
+  @ApiOperation({ summary: 'Upload a thumbnail image' })
+  @ApiResponse({
+    status: 201,
+    description: 'Thumbnail uploaded successfully. Returns the cloud URL.',
+  })
+  @ApiResponse({ status: 400, description: 'No file uploaded or invalid file type.' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        thumbnail: {
+          type: 'string',
+          format: 'binary',
+          description: 'The image file to upload (e.g., jpg, png). Max 5MB.',
+        },
+      },
+    },
+  })
+  @UseInterceptors(FileInterceptor('thumbnail'))
+  async uploadThumbnail(
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }), // 5MB
+          new FileTypeValidator({ fileType: 'image/*' }),
+        ],
       }),
-      fileFilter: imageFileFilter, // Use the image filter
-      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit for images
-    }),
-  )
-  uploadThumbnail(@UploadedFile() file: Express.Multer.File) {
-    if (!file) {
-      throw new BadRequestException('No thumbnail file uploaded.');
-    }
-    const fileUrl = `http://localhost:3000/uploads/thumbnails/${file.filename}`;
+    )
+    file: Express.Multer.File,
+  ) {
+    const result = await this.uploadService.uploadFile(file, 'thumbnail');
     return {
-      message: 'Thumbnail uploaded successfully',
-      url: fileUrl,
+      message: 'Thumbnail uploaded successfully to cloud',
+      url: result.url,
+      provider_id: result.provider_id,
     };
   }
 }
