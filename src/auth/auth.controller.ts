@@ -34,7 +34,9 @@ import {
   ApiResponse,
   ApiBearerAuth,
   ApiExcludeEndpoint,
+  ApiBody, // <-- IMPORT THIS
 } from '@nestjs/swagger';
+import { LoginUserDto } from './dto/login-user.dto'; // <-- AND IMPORT THIS
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -49,26 +51,42 @@ export class AuthController {
   @ApiOperation({ summary: 'Register a new user' })
   @ApiResponse({ status: 201, description: 'User successfully created.' })
   @ApiResponse({ status: 400, description: 'Invalid input data.' })
-  @ApiResponse({ status: 409, description: 'Email or phone number already in use.' })
+  @ApiResponse({
+    status: 409,
+    description: 'Email or phone number already in use.',
+  })
   @Post('register')
   async register(@Body() registerDto: RegisterUserDto) {
     return this.authService.register(registerDto);
   }
 
+  // --- THIS IS THE CORRECTED METHOD ---
   @ApiOperation({ summary: 'Log in a user' })
-  @ApiResponse({ status: 200, description: 'Login successful, returns JWT token.' })
-  @ApiResponse({ status: 401, description: 'Unauthorized, invalid credentials.' })
+  @ApiBody({ type: LoginUserDto }) // <-- ADD THIS DECORATOR
+  @ApiResponse({
+    status: 200,
+    description: 'Login successful, returns JWT token.',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized, invalid credentials.',
+  })
   @HttpCode(HttpStatus.OK)
   @UseGuards(LocalAuthGuard)
   @Post('login')
-  async login(@Request() req) {
+  async login(@Request() req, @Body() _loginDto: LoginUserDto) { // <-- ADD @Body() PARAMETER
+    // The LocalAuthGuard has already validated the user and attached it to req.user.
+    // The _loginDto parameter is not used in the function body, but its presence is
+    // what allows Swagger to generate the correct documentation and UI.
     return this.authService.login(req.user);
   }
-
-  // --- START OF SSO ROUTES ---
+  // --- END OF CORRECTION ---
 
   @ApiOperation({ summary: 'Initiate Google SSO flow' })
-  @ApiResponse({ status: 302, description: 'Redirects to Google for authentication.' })
+  @ApiResponse({
+    status: 302,
+    description: 'Redirects to Google for authentication.',
+  })
   @Get('google')
   @UseGuards(GoogleAuthGuard)
   async googleAuth() {
@@ -85,7 +103,10 @@ export class AuthController {
   }
 
   @ApiOperation({ summary: 'Initiate Facebook SSO flow' })
-  @ApiResponse({ status: 302, description: 'Redirects to Facebook for authentication.' })
+  @ApiResponse({
+    status: 302,
+    description: 'Redirects to Facebook for authentication.',
+  })
   @Get('facebook')
   @UseGuards(FacebookAuthGuard)
   async facebookAuth() {
@@ -101,10 +122,11 @@ export class AuthController {
     res.redirect(`${frontendUrl}/auth/callback?token=${access_token}`);
   }
 
-  // --- END OF SSO ROUTES ---
-
   @ApiOperation({ summary: 'Request a password reset OTP' })
-  @ApiResponse({ status: 200, description: 'A confirmation message is always returned.' })
+  @ApiResponse({
+    status: 200,
+    description: 'A confirmation message is always returned.',
+  })
   @HttpCode(HttpStatus.OK)
   @Post('forgot-password')
   async forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
@@ -128,7 +150,10 @@ export class AuthController {
   @ApiOperation({ summary: 'Change password for a logged-in user' })
   @ApiBearerAuth()
   @ApiResponse({ status: 200, description: 'Password changed successfully.' })
-  @ApiResponse({ status: 401, description: 'Unauthorized or incorrect current password.' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized or incorrect current password.',
+  })
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
   @Patch('change-password')
@@ -154,7 +179,10 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiResponse({ status: 200, description: 'Welcome message for admin.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  @ApiResponse({ status: 403, description: 'Forbidden. User is not an admin.' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden. User is not an admin.',
+  })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(RoleName.ADMIN)
   @Get('admin-only')

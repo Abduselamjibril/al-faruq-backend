@@ -25,5 +25,5 @@ export const dataSourceOptions: DataSourceOptions = {
   
   migrations: [join(__dirname, '..', '/*-*.ts')],
   
-  synchronize: false,
+  synchronize: true,
 };
