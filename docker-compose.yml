@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  # The NestJS API service
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile # Use the development Dockerfile
+    container_name: alfaruq_api
+    ports:
+      - "5000:5000" # Map host port 5000 to container port 5000
+    volumes:
+      - .:/usr/src/app # Mount the host source code into the container for hot-reloading
+      - /usr/src/app/node_modules # Use the node_modules from the container, not the host
+      - ./firebase-service-account.json:/usr/src/app/firebase-service-account.json:ro
+    depends_on:
+      - db # This service will wait for the 'db' service to be ready before starting
+    environment:
+      # These variables MUST match the ones in your data-source.ts and .env file
+      # The host is the name of the database service ('db')
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=mysecretpassword
+      - DB_DATABASE=alfaruq_db
+      # Add ALL other required environment variables here
+      - JWT_SECRET=your_jwt_secret_here
+      - ADMIN_EMAIL=admin@example.com
+      - ADMIN_PASSWORD=adminpassword
+      # ... and so on for Cloudinary, Chapa, YouTube, etc.
+    command: npm run start:dev # Override the CMD to run in watch mode for development
+
+  # The PostgreSQL database service
+  db:
+    image: postgres:15-alpine # Use an official PostgreSQL image
+    container_name: alfaruq_db
+    ports:
+      - "5433:5432" # Map host port 5433 to container port 5432 to avoid local conflicts
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=mysecretpassword
+      - POSTGRES_DB=alfaruq_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data # Persist database data on the host machine
+
+# Define a named volume for the database to persist data across container restarts
+volumes:
+  postgres_data:
