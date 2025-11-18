@@ -8,34 +8,32 @@ import { MailService } from './mail.service';
 @Module({
   imports: [
     MailerModule.forRootAsync({
-      // This module is imported in AppModule, so ConfigService is available
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         transport: {
           host: config.get<string>('MAIL_HOST'),
-          secure: true, // Use true for port 465, false for other ports
+          port: 465, // <-- FIXED: Added port
+          secure: true,
           auth: {
             user: config.get<string>('MAIL_USER'),
             pass: config.get<string>('MAIL_PASSWORD'),
           },
         },
         defaults: {
-          // Use the new, more structured "from" address
+          // Use the variable that now matches the .env file
           from: `"${config.get<string>('MAIL_FROM_NAME')}" <${config.get<string>('MAIL_FROM_ADDRESS')}>`,
         },
         template: {
-          // Define the path to the templates directory
           dir: join(process.cwd(), 'templates'),
-          // Use the Handlebars adapter for .hbs files
           adapter: new HandlebarsAdapter(),
           options: {
-            strict: true, // Prevent using undefined variables in templates
+            strict: true,
           },
         },
       }),
     }),
   ],
   providers: [MailService],
-  exports: [MailService], // Export the service so other modules (like AuthModule) can use it
+  exports: [MailService],
 })
 export class MailModule {}
