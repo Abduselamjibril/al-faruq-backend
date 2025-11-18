@@ -1,21 +1,19 @@
 # --- Stage 1: The Builder ---
-# This stage installs dependencies, builds the source code, and prunes dev dependencies.
+# This stage installs dependencies and builds the source code.
 FROM node:18-alpine AS builder
 
 WORKDIR /usr/src/app
 
+# Copy package files and install dependencies
 COPY package*.json ./
-
-# Install all dependencies including devDependencies for the build step
 RUN npm install
 
+# Copy the rest of the application source code
 COPY . .
 
 # Run the build
 RUN npm run build
 
-# Remove development dependencies after the build is complete
-RUN npm prune --production
 
 # --- Stage 2: The Production Image ---
 # This stage creates the final, lightweight image.
@@ -23,14 +21,14 @@ FROM node:18-alpine
 
 WORKDIR /usr/src/app
 
-# Copy the pruned node_modules from the 'builder' stage
-COPY --from=builder /usr/src/app/node_modules ./node_modules
+# Copy package.json for runtime information (like start scripts)
+COPY package*.json ./
+
+# Install ONLY production dependencies
+RUN npm install --omit=dev
 
 # Copy the compiled JavaScript code from the 'builder' stage
 COPY --from=builder /usr/src/app/dist ./dist
-
-# Copy package.json for runtime information
-COPY package*.json ./
 
 EXPOSE 5000
 
