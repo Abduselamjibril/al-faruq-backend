@@ -1,3 +1,5 @@
+# docker-compose.yml (UPDATED FOR DEVELOPMENT)
+
 version: '3.8'
 
 services:
@@ -15,19 +17,8 @@ services:
       - ./firebase-service-account.json:/usr/src/app/firebase-service-account.json:ro
     depends_on:
       - db # This service will wait for the 'db' service to be ready before starting
-    environment:
-      # These variables MUST match the ones in your data-source.ts and .env file
-      # The host is the name of the database service ('db')
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DB_USERNAME=postgres
-      - DB_PASSWORD=mysecretpassword
-      - DB_DATABASE=alfaruq_db
-      # Add ALL other required environment variables here
-      - JWT_SECRET=your_jwt_secret_here
-      - ADMIN_EMAIL=admin@example.com
-      - ADMIN_PASSWORD=adminpassword
-      # ... and so on for Cloudinary, Chapa, YouTube, etc.
+    env_file: # <-- CHANGE: Load variables directly from your .env file
+      - ./.env
     command: npm run start:dev # Override the CMD to run in watch mode for development
 
   # The PostgreSQL database service
@@ -36,10 +27,10 @@ services:
     container_name: alfaruq_db
     ports:
       - "5433:5432" # Map host port 5433 to container port 5432 to avoid local conflicts
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=mysecretpassword
-      - POSTGRES_DB=alfaruq_db
+    environment: # <-- CHANGE: Use variables from your .env file
+      - POSTGRES_USER=${DB_USERNAME}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_DATABASE}
     volumes:
       - postgres_data:/var/lib/postgresql/data # Persist database data on the host machine
 
