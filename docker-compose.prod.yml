@@ -35,7 +35,7 @@ services:
     ports:
       # You can expose this port to the host for direct access if needed for debugging
       # Format: "HOST_PORT:CONTAINER_PORT"
-      - "5433:5432"
+      - "5434:5432"
     volumes:
       # Persist database data on the host machine
       - postgres_data_prod:/var/lib/postgresql/data
