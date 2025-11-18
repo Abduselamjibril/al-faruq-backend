@@ -14,15 +14,21 @@ export class FacebookStrategy extends PassportStrategy(Strategy, 'facebook') {
   ) {
     const facebookAppId = configService.get<string>('FACEBOOK_APP_ID');
     const facebookAppSecret = configService.get<string>('FACEBOOK_APP_SECRET');
+    // --- 1. READ the callback URL from environment variables ---
+    const facebookCallbackUrl = configService.get<string>(
+      'FACEBOOK_CALLBACK_URL',
+    );
 
-    if (!facebookAppId || !facebookAppSecret) {
+    // --- 2. UPDATE the validation to include the new variable ---
+    if (!facebookAppId || !facebookAppSecret || !facebookCallbackUrl) {
       throw new Error('Facebook OAuth credentials are not configured.');
     }
 
     super({
       clientID: facebookAppId,
       clientSecret: facebookAppSecret,
-      callbackURL: 'http://localhost:3000/api/auth/facebook/callback',
+      // --- 3. USE the dynamic variable instead of the hardcoded string ---
+      callbackURL: facebookCallbackUrl,
       scope: 'email',
       profileFields: ['id', 'emails', 'name'],
     });
@@ -36,10 +42,7 @@ export class FacebookStrategy extends PassportStrategy(Strategy, 'facebook') {
   ): Promise<any> {
     const { name, emails, id } = profile;
 
-    // --- START OF FIX ---
     if (!emails || emails.length === 0) {
-      // Facebook does not guarantee an email will be provided.
-      // We must handle this case.
       return done(
         new UnauthorizedException('Facebook did not provide an email address.'),
         false,
@@ -50,11 +53,9 @@ export class FacebookStrategy extends PassportStrategy(Strategy, 'facebook') {
       provider: 'facebook',
       providerId: id,
       email: emails[0].value,
-      // Provide fallback values in case name is not provided
       firstName: name?.givenName || '',
       lastName: name?.familyName || '',
     };
-    // --- END OF FIX ---
 
     const user = await this.authService.validateSocialLogin(userProfile);
 

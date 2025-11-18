@@ -2,7 +2,6 @@
 
 import { ApiProperty } from '@nestjs/swagger';
 import {
-  IsBoolean,
   IsEmail,
   IsNotEmpty,
   IsOptional,
@@ -10,6 +9,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { Match } from '../decorators/match.decorator';
+import { IsTrue } from '../decorators/is-true.decorator'; // <-- IMPORT THE NEW DECORATOR
 
 export class RegisterUserDto {
   @ApiProperty({
@@ -42,8 +42,8 @@ export class RegisterUserDto {
     required: false,
   })
   @IsEmail()
-  @IsOptional()
-  email?: string;
+  @IsNotEmpty() // <-- REPLACED @IsOptional with @IsNotEmpty
+  email: string; // <-- REMOVED optional '?' marker
 
   @ApiProperty({
     description: "User's password (at least 8 characters)",
@@ -66,6 +66,6 @@ export class RegisterUserDto {
     description: 'Must be true to indicate agreement to terms and conditions',
     example: true,
   })
-  @IsBoolean({ message: 'You must agree to the terms and privacy policy' })
+  @IsTrue({ message: 'You must agree to the terms and privacy policy' }) // <-- REPLACE @IsBoolean WITH @IsTrue
   agreedToTerms: boolean;
 }

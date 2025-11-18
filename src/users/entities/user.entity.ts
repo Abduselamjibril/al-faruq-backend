@@ -30,11 +30,11 @@ export class User {
   @Column({ type: 'varchar', nullable: true })
   lastName: string | null;
 
-  @Column({ type: 'varchar', unique: true })
-  phoneNumber: string;
+  @Column({ type: 'varchar', unique: true, nullable: true }) // <-- ADDED nullable: true
+  phoneNumber: string | null; // <-- ADDED | null
 
-  @Column({ type: 'varchar', unique: true, nullable: true })
-  email: string | null;
+  @Column({ type: 'varchar', unique: true }) // <-- REMOVED nullable: true
+  email: string; // <-- REMOVED | null
 
   @Column({ type: 'varchar', nullable: true })
   @Exclude()

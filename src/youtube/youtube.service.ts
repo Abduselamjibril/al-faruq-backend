@@ -3,6 +3,7 @@
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Cron, CronExpression } from '@nestjs/schedule'; // <-- 1. IMPORT Cron and CronExpression
 import type { Cache } from 'cache-manager';
 import { google, youtube_v3 } from 'googleapis';
 import { PlaylistItemDto } from './dto/playlist-response.dto';
@@ -18,7 +19,6 @@ export class YoutubeService {
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
     private configService: ConfigService,
   ) {
-    // --- START: CONFIGURATION VALIDATION ---
     const apiKey = this.configService.get<string>('YOUTUBE_API_KEY');
     const playlistId = this.configService.get<string>('YOUTUBE_PLAYLIST_ID');
 
@@ -28,13 +28,26 @@ export class YoutubeService {
       );
     }
     this.playlistId = playlistId;
-    // --- END: CONFIGURATION VALIDATION ---
 
     this.youtube = google.youtube({
       version: 'v3',
       auth: apiKey,
     });
   }
+
+  // --- 2. ADD THE NEW CRON JOB METHOD ---
+  /**
+   * This is a scheduled task that runs automatically every day at midnight.
+   * It refreshes the YouTube playlist cache to ensure the data is up-to-date.
+   */
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT, {
+    timeZone: 'Africa/Addis_Ababa', // Set to your server's/users' timezone
+  })
+  async handleCron() {
+    this.logger.log('Running scheduled job: Refreshing YouTube playlist cache...');
+    await this.refreshPlaylistCache();
+  }
+  // --- END OF NEW METHOD ---
 
   /**
    * The main public method to get playlist videos.
@@ -55,9 +68,10 @@ export class YoutubeService {
 
   /**
    * (Admin only) Clears the existing cache and fetches fresh data from the YouTube API.
+   * This method is now used by both the admin controller and the scheduled cron job.
    */
   async refreshPlaylistCache(): Promise<void> {
-    this.logger.log('Admin triggered cache refresh. Deleting old cache...');
+    this.logger.log('Refreshing YouTube playlist cache. Deleting old cache...');
     await this.cacheManager.del(this.CACHE_KEY);
     await this._fetchAndCachePlaylist();
     this.logger.log('Cache successfully refreshed.');
@@ -94,6 +108,8 @@ export class YoutubeService {
 
       const formattedVideos = this._formatVideoData(allVideos);
 
+      // We remove the indefinite cache and let the nightly cron handle updates.
+      // A TTL could be added here as a fallback if desired.
       await this.cacheManager.set(this.CACHE_KEY, formattedVideos);
       this.logger.log(`Successfully fetched and cached ${formattedVideos.length} videos.`);
 
@@ -123,13 +139,13 @@ export class YoutubeService {
           return {
             videoId: item.snippet.resourceId.videoId,
             title: item.snippet.title,
-            description: item.snippet.description || '', // Ensure description is always a string
+            description: item.snippet.description || '',
             thumbnailUrl:
               item.snippet.thumbnails.high?.url ||
               item.snippet.thumbnails.medium?.url ||
               item.snippet.thumbnails.default?.url ||
-              '', // Ensure thumbnailUrl is always a string
-            publishedAt: item.snippet.publishedAt || '', // Ensure publishedAt is always a string
+              '',
+            publishedAt: item.snippet.publishedAt || '',
           };
         }
         return null;

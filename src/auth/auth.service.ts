@@ -20,7 +20,7 @@ import { RoleName } from '../roles/entities/role.entity';
 export interface SocialProfile {
   provider: 'google' | 'facebook';
   providerId: string;
-  email: string | null; // <-- FIX: Allow email to be null initially
+  email: string; // <-- REMOVED | null as email is now essential for our logic
   firstName: string;
   lastName: string;
 }
@@ -44,11 +44,9 @@ export class AuthService {
       return user;
     }
 
-    // --- FIX: Add a guard clause to ensure email exists for linking/creation ---
     if (!profile.email) {
       throw new BadRequestException('Email not provided by the social provider.');
     }
-    // --- END OF FIX ---
 
     const existingUser = await this.usersService.findByEmail(profile.email);
     if (existingUser) {
@@ -81,7 +79,7 @@ export class AuthService {
       googleId: profile.provider === 'google' ? profile.providerId : null,
       facebookId:
         profile.provider === 'facebook' ? profile.providerId : null,
-      phoneNumber: `TEMP_${profile.providerId}`,
+      phoneNumber: null, // <-- CHANGED from 'TEMP_...' to null
     };
 
     return this.usersService.create(newUser);
@@ -94,17 +92,20 @@ export class AuthService {
       throw new BadRequestException('Passwords do not match');
     }
 
-    const existingPhone =
-      await this.usersService.findByPhoneNumber(phoneNumber);
-    if (existingPhone) {
-      throw new ConflictException('Phone number already in use');
+    // Since phoneNumber is optional for SSO users, we should check if it's provided
+    // during local registration before checking for duplicates.
+    if (phoneNumber) {
+      const existingPhone =
+        await this.usersService.findByPhoneNumber(phoneNumber);
+      if (existingPhone) {
+        throw new ConflictException('Phone number already in use');
+      }
     }
 
-    if (email) {
-      const existingEmail = await this.usersService.findByEmail(email);
-      if (existingEmail) {
-        throw new ConflictException('Email already in use');
-      }
+    // The 'if (email)' check is removed because email is now mandatory in the DTO
+    const existingEmail = await this.usersService.findByEmail(email);
+    if (existingEmail) {
+      throw new ConflictException('Email already in use');
     }
 
     const defaultRole = await this.rolesService.findByName(RoleName.USER);

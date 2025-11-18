@@ -12,19 +12,21 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     private readonly configService: ConfigService,
     private readonly authService: AuthService,
   ) {
-    // --- START OF FIX ---
     const googleClientId = configService.get<string>('GOOGLE_CLIENT_ID');
     const googleClientSecret = configService.get<string>('GOOGLE_CLIENT_SECRET');
+    // --- 1. READ the callback URL from environment variables ---
+    const googleCallbackUrl = configService.get<string>('GOOGLE_CALLBACK_URL');
 
-    if (!googleClientId || !googleClientSecret) {
+    // --- 2. UPDATE the validation to include the new variable ---
+    if (!googleClientId || !googleClientSecret || !googleCallbackUrl) {
       throw new Error('Google OAuth credentials are not configured.');
     }
-    // --- END OF FIX ---
 
     super({
-      clientID: googleClientId, // Use the validated variable
-      clientSecret: googleClientSecret, // Use the validated variable
-      callbackURL: 'http://localhost:3000/api/auth/google/callback',
+      clientID: googleClientId,
+      clientSecret: googleClientSecret,
+      // --- 3. USE the dynamic variable instead of the hardcoded string ---
+      callbackURL: googleCallbackUrl,
       scope: ['email', 'profile'],
     });
   }

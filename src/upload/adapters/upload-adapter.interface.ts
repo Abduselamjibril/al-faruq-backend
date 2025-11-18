@@ -8,7 +8,13 @@ export interface UploadResult {
 }
 
 export interface IUploadAdapter {
-  upload(file: Express.Multer.File, folder: string): Promise<UploadResult>;
+  // --- UPDATED METHOD SIGNATURE ---
+  // We now pass the 'type' to the adapter so it can decide which transformations to apply.
+  upload(
+    file: Express.Multer.File,
+    folder: string,
+    type: 'video' | 'thumbnail', // <-- ADDED the 'type' parameter
+  ): Promise<UploadResult>;
 }
 
 // We use an injection token to make our adapter swappable
