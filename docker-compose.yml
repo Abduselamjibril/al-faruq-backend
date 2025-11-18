@@ -1,6 +1,6 @@
 # docker-compose.yml (UPDATED FOR DEVELOPMENT)
 
-version: '3.8'
+
 
 services:
   # The NestJS API service

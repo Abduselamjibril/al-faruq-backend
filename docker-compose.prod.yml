@@ -1,17 +1,14 @@
 
-
 services:
   # The NestJS API service for production
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile.prod # Use the optimized production Dockerfile
+    image: abdu78/alfaruq-api:latest
     container_name: alfaruq_api_prod
     restart: always # Always restart the container if it crashes
     ports:
       # IMPORTANT: We only expose the port internally to Docker.
       # Nginx will handle external access.
-      - "5000:5000"
+      - "5001:5000"
     depends_on:
       - db
     env_file:
@@ -19,8 +16,8 @@ services:
       - ./.env
     volumes:
       # Mount the service account key into the container
-      # This assumes the key is in the project root on the server
-      - ./firebase-service-account.json:/usr/src/app/firebase-service-account.json:ro
+      # This assumes the key is in the project root on the serv>
+      - ./firebase-service-account.json:/usr/src/app/firebase-s>
 
   # The PostgreSQL database service
   db:
