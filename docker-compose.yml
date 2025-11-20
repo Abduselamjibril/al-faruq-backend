@@ -20,7 +20,7 @@ services:
     image: postgres:15-alpine
     container_name: alfaruq_db
     ports:
-      - "5433:5432"
+      - "5459:5432"
     environment:
       POSTGRES_USER: ${DB_USERNAME}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
