@@ -10,6 +10,11 @@ services:
       - "5001:5000"
     env_file:
       - .env
+    volumes:
+      # This maps the local file to the correct path inside the>
+      - ./firebase-service-account.json:/usr/src/app/firebase-s>
+    # ------------------------------
+      - ./templates:/usr/src/app/templates
     depends_on:
       db:
         condition: service_healthy
