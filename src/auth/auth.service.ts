@@ -1,4 +1,5 @@
 // src/auth/auth.service.ts
+
 import {
   BadRequestException,
   ConflictException,
@@ -20,7 +21,7 @@ import { RoleName } from '../roles/entities/role.entity';
 export interface SocialProfile {
   provider: 'google' | 'facebook';
   providerId: string;
-  email: string; // <-- REMOVED | null as email is now essential for our logic
+  email: string;
   firstName: string;
   lastName: string;
 }
@@ -39,7 +40,6 @@ export class AuthService {
       profile.provider,
       profile.providerId,
     );
-
     if (user) {
       return user;
     }
@@ -48,7 +48,10 @@ export class AuthService {
       throw new BadRequestException('Email not provided by the social provider.');
     }
 
-    const existingUser = await this.usersService.findByEmail(profile.email);
+    // --- FIX: Normalize email from social provider to lowercase ---
+    const lowercasedEmail = profile.email.toLowerCase();
+
+    const existingUser = await this.usersService.findByEmail(lowercasedEmail);
     if (existingUser) {
       const updateData: Partial<User> = {};
       if (profile.provider === 'google') {
@@ -67,7 +70,8 @@ export class AuthService {
     }
 
     const newUser = {
-      email: profile.email,
+      // --- FIX: Store the normalized email ---
+      email: lowercasedEmail,
       firstName: profile.firstName,
       lastName: profile.lastName,
       role: defaultRole,
@@ -77,9 +81,8 @@ export class AuthService {
           ? AuthProvider.GOOGLE
           : AuthProvider.FACEBOOK,
       googleId: profile.provider === 'google' ? profile.providerId : null,
-      facebookId:
-        profile.provider === 'facebook' ? profile.providerId : null,
-      phoneNumber: null, // <-- CHANGED from 'TEMP_...' to null
+      facebookId: profile.provider === 'facebook' ? profile.providerId : null,
+      phoneNumber: null,
     };
 
     return this.usersService.create(newUser);
@@ -92,8 +95,6 @@ export class AuthService {
       throw new BadRequestException('Passwords do not match');
     }
 
-    // Since phoneNumber is optional for SSO users, we should check if it's provided
-    // during local registration before checking for duplicates.
     if (phoneNumber) {
       const existingPhone =
         await this.usersService.findByPhoneNumber(phoneNumber);
@@ -102,8 +103,10 @@ export class AuthService {
       }
     }
 
-    // The 'if (email)' check is removed because email is now mandatory in the DTO
-    const existingEmail = await this.usersService.findByEmail(email);
+    // --- FIX: Normalize email to lowercase before checking and saving ---
+    const lowercasedEmail = email.toLowerCase();
+
+    const existingEmail = await this.usersService.findByEmail(lowercasedEmail);
     if (existingEmail) {
       throw new ConflictException('Email already in use');
     }
@@ -119,7 +122,8 @@ export class AuthService {
       const user = await this.usersService.create({
         ...rest,
         phoneNumber,
-        email,
+        // --- FIX: Store the normalized email ---
+        email: lowercasedEmail,
         password: hashedPassword,
         authProvider: AuthProvider.LOCAL,
         role: defaultRole,
@@ -131,6 +135,7 @@ export class AuthService {
   }
 
   async validateUser(loginIdentifier: string, pass: string): Promise<any> {
+    // No change is needed here because findByLoginIdentifier in UsersService now handles normalization.
     const user =
       await this.usersService.findByLoginIdentifier(loginIdentifier);
 
@@ -153,7 +158,10 @@ export class AuthService {
   }
 
   async requestPasswordReset(email: string): Promise<void> {
-    const user = await this.usersService.findByEmail(email);
+    // --- FIX: Normalize email to lowercase before searching ---
+    const lowercasedEmail = email.toLowerCase();
+    const user = await this.usersService.findByEmail(lowercasedEmail);
+
     if (!user) {
       console.log(`Password reset requested for non-existent email: ${email}`);
       return;
@@ -170,7 +178,10 @@ export class AuthService {
 
   async resetPassword(resetDto: ResetPasswordDto): Promise<void> {
     const { email, otp, newPassword } = resetDto;
-    const user = await this.usersService.findByEmail(email);
+
+    // --- FIX: Normalize email to lowercase before searching ---
+    const lowercasedEmail = email.toLowerCase();
+    const user = await this.usersService.findByEmail(lowercasedEmail);
 
     if (
       !user ||
