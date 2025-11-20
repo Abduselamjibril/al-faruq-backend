@@ -1,4 +1,4 @@
-import { DataSourceOptions } from 'typeorm';
+import { DataSource, DataSourceOptions } from 'typeorm';
 import { config } from 'dotenv';
 import { join } from 'path';
 
@@ -19,11 +19,17 @@ export const dataSourceOptions: DataSourceOptions = {
   username: getEnv('DB_USERNAME'),
   password: getEnv('DB_PASSWORD'),
   database: getEnv('DB_DATABASE'),
-  
+
   // This path finds ALL entities in your project
   entities: [join(__dirname, '**', '*.entity.{ts,js}')],
-  
-  migrations: [join(__dirname, '..', '/*-*.ts')],
-  
+
+  // FIX: This now points to the compiled JavaScript migration files in the `dist` folder.
+  migrations: [join(__dirname, '..', '/*-*.js')],
+
   synchronize: false,
 };
+
+// ADD THIS: Create and export the DataSource instance.
+// This allows us to use it in `main.ts` to run migrations on startup.
+const dataSource = new DataSource(dataSourceOptions);
+export default dataSource;
