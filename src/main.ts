@@ -8,21 +8,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import dataSource from './data-source'; // <-- 1. IMPORT THE DATASOURCE
 
 async function bootstrap() {
-  // --- 2. RUN DATABASE MIGRATIONS ON STARTUP ---
-  // This block ensures the database schema is up-to-date before the application runs.
-  try {
-    console.log('Initializing database connection for migrations...');
-    const db = await dataSource.initialize();
-    console.log('Database connection initialized. Running migrations...');
-    await db.runMigrations();
-    console.log('Migrations have been run successfully.');
-    await db.destroy();
-    console.log('Temporary database connection for migrations closed.');
-  } catch (error) {
-    console.error('FATAL: Error running database migrations.', error);
-    process.exit(1); // Exit the process with an error code if migrations fail
-  }
-  // --- END OF MIGRATIONS BLOCK ---
+ 
 
   const app = await NestFactory.create(AppModule);
 
