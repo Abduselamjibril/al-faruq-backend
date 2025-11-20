@@ -11,8 +11,8 @@ services:
     env_file:
       - .env
     volumes:
-      # This maps the local file to the correct path inside the>
-      - ./firebase-service-account.json:/usr/src/app/firebase-s>
+      # This maps the local file to the correct path inside the
+      - ./firebase-service-account.json:/usr/src/app/firebase-service-account.json:ro
     # ------------------------------
       - ./templates:/usr/src/app/templates
     depends_on:
