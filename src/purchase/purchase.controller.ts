@@ -16,11 +16,14 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiBody, // --- ADDED ---
   ApiExcludeEndpoint,
   ApiOperation,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+// --- ADDED the new response DTO ---
+import { InitiatePurchaseResponseDto } from './dto/initiate-purchase-response.dto';
 
 // Note: To avoid duplication, this should be moved to its own file.
 export const GetUser = createParamDecorator(
@@ -38,9 +41,13 @@ export class PurchaseController {
   @ApiOperation({
     summary: 'Initiate a content purchase and get a payment URL',
   })
+  // --- ADDED ApiBody to show request example ---
+  @ApiBody({ type: InitiatePurchaseDto })
+  // --- UPDATED ApiResponse to show response example using our new DTO ---
   @ApiResponse({
     status: 201,
     description: 'Payment successfully initiated. Returns a checkoutUrl.',
+    type: InitiatePurchaseResponseDto,
   })
   @ApiResponse({
     status: 400,
@@ -60,7 +67,7 @@ export class PurchaseController {
   initiatePurchase(
     @GetUser() user: { id: number },
     @Body() initiatePurchaseDto: InitiatePurchaseDto,
-  ) {
+  ): Promise<InitiatePurchaseResponseDto> { // --- UPDATED return type for clarity
     return this.purchaseService.initiatePurchase(user.id, initiatePurchaseDto);
   }
 
@@ -70,6 +77,7 @@ export class PurchaseController {
   async chapaWebhook(@Body() body: any, @Req() req: any) {
     const chapaResponse = Object.keys(body).length > 0 ? body : req.query;
     console.log('Chapa webhook received:', chapaResponse);
+    // This is a fire-and-forget operation, no need to await it.
     this.purchaseService.verifyAndGrantAccess(chapaResponse);
     return;
   }
