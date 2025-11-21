@@ -30,11 +30,8 @@ export class ContentService {
     return this.contentRepository.save(newContent);
   }
 
-  // Finds only top-level content (Movies, Series, and Music Videos) for the main admin list.
   findAllTopLevel(): Promise<Content[]> {
     return this.contentRepository.find({
-      // --- THIS IS THE FIX ---
-      // Added MUSIC_VIDEO to the where clause to ensure it appears on the dashboard.
       where: [
         { type: ContentType.MOVIE },
         { type: ContentType.SERIES },
@@ -44,11 +41,6 @@ export class ContentService {
     });
   }
 
-  /**
-   * Finds a single piece of content and its entire hierarchy (seasons and episodes).
-   * This is a performance-optimized query to prevent the N+1 problem.
-   * @param id The ID of the top-level content (MOVIE or SERIES)
-   */
   async findOneWithHierarchy(id: string): Promise<Content> {
     const content = await this.contentRepository
       .createQueryBuilder('content')
@@ -81,18 +73,21 @@ export class ContentService {
     return this.contentRepository.save(content);
   }
 
-  async remove(id: string): Promise<void> {
+  // --- THIS METHOD HAS BEEN UPDATED ---
+  async remove(id: string): Promise<{ message: string }> {
     const content = await this.contentRepository.findOneBy({ id });
     if (!content) {
       throw new NotFoundException(`Content with ID ${id} not found.`);
     }
     await this.contentRepository.remove(content);
+    // Return a success message object
+    return { message: 'Content successfully deleted.' };
   }
+  // --- END OF UPDATE ---
 
   async lockContent(id: string, createPricingDto: CreatePricingDto): Promise<Content> {
     const content = await this.findOneWithHierarchy(id);
 
-    // Locking is only allowed on top-level content (including MUSIC_VIDEO if desired, adjust if not)
     if (content.type !== ContentType.MOVIE && content.type !== ContentType.SERIES && content.type !== ContentType.MUSIC_VIDEO) {
       throw new Error('Locking is only permitted for MOVIES, SERIES, or MUSIC VIDEOS.');
     }

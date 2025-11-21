@@ -1,5 +1,3 @@
-// src/content/content.controller.ts
-
 import {
   Controller,
   Get,
@@ -26,9 +24,9 @@ import {
   ApiTags,
   ApiOperation,
   ApiResponse,
-  ApiBody, // --- ADDED ---
+  ApiBody,
 } from '@nestjs/swagger';
-import { Content } from './entities/content.entity'; // --- ADDED ---
+import { Content } from './entities/content.entity';
 
 @ApiTags('Content Management (Admin)')
 @ApiBearerAuth()
@@ -39,9 +37,7 @@ export class ContentController {
   constructor(private readonly contentService: ContentService) {}
 
   @ApiOperation({ summary: 'Create a new content item (movie, series, etc.)' })
-  // --- ADDED ApiBody to show request example ---
   @ApiBody({ type: CreateContentDto })
-  // --- UPDATED ApiResponse to show response example ---
   @ApiResponse({ status: 201, description: 'Content successfully created.', type: Content })
   @ApiResponse({ status: 400, description: 'Invalid input data.' })
   @ApiResponse({ status: 404, description: 'Parent content not found if parentId is provided.' })
@@ -51,7 +47,6 @@ export class ContentController {
   }
 
   @ApiOperation({ summary: 'Get all top-level content items' })
-  // --- UPDATED ApiResponse to show array response example ---
   @ApiResponse({ status: 200, description: 'Returns a list of movies, series, and music videos.', type: [Content] })
   @Get()
   findAllTopLevel() {
@@ -59,7 +54,6 @@ export class ContentController {
   }
 
   @ApiOperation({ summary: 'Get a single content item with its full hierarchy' })
-  // --- UPDATED ApiResponse to show response example ---
   @ApiResponse({ status: 200, description: 'Returns the content item with its children (seasons/episodes).', type: Content })
   @ApiResponse({ status: 404, description: 'Content with the specified ID not found.' })
   @Get(':id')
@@ -68,9 +62,7 @@ export class ContentController {
   }
 
   @ApiOperation({ summary: 'Update a content item' })
-  // --- ADDED ApiBody to show request example ---
   @ApiBody({ type: UpdateContentDto })
-  // --- UPDATED ApiResponse to show response example ---
   @ApiResponse({ status: 200, description: 'Content successfully updated.', type: Content })
   @ApiResponse({ status: 404, description: 'Content with the specified ID not found.' })
   @Patch(':id')
@@ -81,19 +73,21 @@ export class ContentController {
     return this.contentService.update(id, updateContentDto);
   }
 
+  // --- THIS ENDPOINT HAS BEEN UPDATED ---
   @ApiOperation({ summary: 'Delete a content item and all its children' })
-  @ApiResponse({ status: 204, description: 'Content successfully deleted.' })
+  // Changed status to 200 to allow a response body
+  @ApiResponse({ status: 200, description: 'Content successfully deleted.' })
   @ApiResponse({ status: 404, description: 'Content with the specified ID not found.' })
   @Delete(':id')
-  @HttpCode(HttpStatus.NO_CONTENT)
+  // Changed HttpCode to OK (200)
+  @HttpCode(HttpStatus.OK)
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.contentService.remove(id);
   }
+  // --- END OF UPDATE ---
 
   @ApiOperation({ summary: 'Lock a content item and set its pricing' })
-  // --- ADDED ApiBody to show request example ---
   @ApiBody({ type: CreatePricingDto })
-  // --- UPDATED ApiResponse to show response example ---
   @ApiResponse({ status: 201, description: 'Content successfully locked and pricing set.', type: Content })
   @ApiResponse({ status: 404, description: 'Content with the specified ID not found.' })
   @Post(':id/lock')
@@ -105,10 +99,8 @@ export class ContentController {
   }
 
   @ApiOperation({ summary: 'Unlock a content item' })
-  // --- UPDATED ApiResponse to show response example ---
   @ApiResponse({ status: 200, description: 'Content successfully unlocked.', type: Content })
   @ApiResponse({ status: 404, description: 'Content with the specified ID not found.' })
-  // --- UPDATED to use PATCH and 200 OK status for semantic correctness ---
   @Patch(':id/unlock')
   @HttpCode(HttpStatus.OK)
   unlockContent(@Param('id', ParseUUIDPipe) id: string) {
