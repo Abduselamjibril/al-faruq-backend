@@ -3,10 +3,10 @@
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Cron, CronExpression } from '@nestjs/schedule'; // <-- 1. IMPORT Cron and CronExpression
+import { Cron, CronExpression } from '@nestjs/schedule';
 import type { Cache } from 'cache-manager';
 import { google, youtube_v3 } from 'googleapis';
-import { PlaylistItemDto } from './dto/playlist-response.dto';
+import { PlaylistItemDto, VideoStatus } from './dto/playlist-response.dto';
 
 @Injectable()
 export class YoutubeService {
@@ -35,7 +35,6 @@ export class YoutubeService {
     });
   }
 
-  // --- 2. ADD THE NEW CRON JOB METHOD ---
   /**
    * This is a scheduled task that runs automatically every day at midnight.
    * It refreshes the YouTube playlist cache to ensure the data is up-to-date.
@@ -44,26 +43,41 @@ export class YoutubeService {
     timeZone: 'Africa/Addis_Ababa', // Set to your server's/users' timezone
   })
   async handleCron() {
-    this.logger.log('Running scheduled job: Refreshing YouTube playlist cache...');
+    this.logger.log(
+      'Running scheduled job: Refreshing YouTube playlist cache...',
+    );
     await this.refreshPlaylistCache();
   }
-  // --- END OF NEW METHOD ---
 
   /**
    * The main public method to get playlist videos.
-   * Checks the cache first and fetches from the API if the cache is empty.
+   * Checks the cache first, then fetches from the API if the cache is empty.
+   * Filters the videos based on the optional 'status' parameter.
    */
-  async getPlaylistVideos(): Promise<PlaylistItemDto[]> {
+  async getPlaylistVideos(
+    status?: VideoStatus,
+  ): Promise<PlaylistItemDto[]> {
     const cachedData = await this.cacheManager.get<PlaylistItemDto[]>(
       this.CACHE_KEY,
     );
+    let videos: PlaylistItemDto[];
+
     if (cachedData) {
       this.logger.log('Serving playlist from cache.');
-      return cachedData;
+      videos = cachedData;
+    } else {
+      this.logger.log('Cache empty. Fetching fresh data to populate cache.');
+      videos = await this._fetchAndCachePlaylist();
     }
 
-    this.logger.log('Cache empty. Fetching fresh data to populate cache.');
-    return this._fetchAndCachePlaylist();
+    // If a status filter is provided by the client, apply it here
+    if (status) {
+      this.logger.log(`Filtering playlist for videos with status: ${status}`);
+      return videos.filter((video) => video.status === status);
+    }
+
+    // If no filter is provided, return all videos
+    return videos;
   }
 
   /**
@@ -88,7 +102,8 @@ export class YoutubeService {
 
       do {
         const params: youtube_v3.Params$Resource$Playlistitems$List = {
-          part: ['snippet'],
+          // We add 'status' to the 'part' parameter to fetch the video's privacy status
+          part: ['snippet', 'status'],
           playlistId: this.playlistId,
           maxResults: 50,
         };
@@ -111,7 +126,9 @@ export class YoutubeService {
       // We remove the indefinite cache and let the nightly cron handle updates.
       // A TTL could be added here as a fallback if desired.
       await this.cacheManager.set(this.CACHE_KEY, formattedVideos);
-      this.logger.log(`Successfully fetched and cached ${formattedVideos.length} videos.`);
+      this.logger.log(
+        `Successfully fetched and cached ${formattedVideos.length} videos.`,
+      );
 
       return formattedVideos;
     } catch (error) {
@@ -129,12 +146,14 @@ export class YoutubeService {
   ): PlaylistItemDto[] {
     return items
       .map((item) => {
+        // We add a check for 'item.status' to ensure the privacy status is present
         if (
           item.snippet &&
           item.snippet.resourceId &&
           item.snippet.resourceId.videoId &&
           item.snippet.title &&
-          item.snippet.thumbnails
+          item.snippet.thumbnails &&
+          item.status
         ) {
           return {
             videoId: item.snippet.resourceId.videoId,
@@ -146,6 +165,8 @@ export class YoutubeService {
               item.snippet.thumbnails.default?.url ||
               '',
             publishedAt: item.snippet.publishedAt || '',
+            // We extract the privacyStatus and map it to our new 'status' field
+            status: item.status.privacyStatus as VideoStatus,
           };
         }
         return null;

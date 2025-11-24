@@ -7,6 +7,16 @@
  * and predictable response format.
  */
 
+/**
+ * Defines the possible privacy statuses for a YouTube video.
+ * This ensures type safety and consistency.
+ */
+export enum VideoStatus {
+  PUBLIC = 'public',
+  PRIVATE = 'private',
+  UNLISTED = 'unlisted',
+}
+
 export class PlaylistItemDto {
   /**
    * The unique YouTube video ID.
@@ -33,8 +43,15 @@ export class PlaylistItemDto {
   thumbnailUrl: string;
 
   /**
-   * The date and time when the video was published, in ISO 8601 format.
+   * The date and time when the video was published, in ISO 8-601 format.
    * Example: "2009-10-25T06:57:33Z"
    */
   publishedAt: string;
+
+  /**
+   * The privacy status of the video (public, private, or unlisted).
+   * This is a new field to help the client filter content.
+   * Example: "public"
+   */
+  status: VideoStatus;
 }
