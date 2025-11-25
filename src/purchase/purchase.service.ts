@@ -97,6 +97,16 @@ export class PurchaseService {
       throw new NotFoundException(`User with ID ${userId} not found.`);
     }
 
+    // --- [CHANGE 1 START] ---
+    // Add a validation check to ensure the user has an email address.
+    // Chapa requires a valid email to process the transaction.
+    if (!user.email) {
+      throw new BadRequestException(
+        'User does not have an email address. Please update your profile before making a purchase.',
+      );
+    }
+    // --- [CHANGE 1 END] ---
+
     const content = await this.contentRepository.findOne({
       where: { id: contentId },
       relations: ['pricingTier'],
@@ -116,17 +126,15 @@ export class PurchaseService {
       throw new BadRequestException('Invalid duration or price calculation.');
     }
 
-    // --- [CHANGE 1 START] ---
     // Generate a new, shorter tx_ref that is guaranteed to be under the 50-character limit.
     // The length will be 3 + 32 = 35 characters.
     const tx_ref = `tx-${randomBytes(16).toString('hex')}`;
-    // --- [CHANGE 1 END] ---
 
     // Change chapaRequestBody to type 'any' to allow adding the 'splits' property
     const chapaRequestBody: any = {
       amount: price.toString(),
       currency: 'ETB',
-      email: user.email || '',
+      email: user.email, // We can now safely use user.email without the fallback
       first_name: user.firstName || '',
       last_name: user.lastName || '',
       tx_ref: tx_ref,
@@ -166,7 +174,6 @@ export class PurchaseService {
         );
       }
 
-      // --- [CHANGE 2 START] ---
       // Create the pending transaction record with the new userId and contentId fields.
       const pendingTx = this.pendingTransactionRepository.create({
         tx_ref: tx_ref,
@@ -174,7 +181,6 @@ export class PurchaseService {
         userId: userId,
         contentId: contentId,
       });
-      // --- [CHANGE 2 END] ---
       await this.pendingTransactionRepository.save(pendingTx);
 
       return { checkoutUrl: response.data.data.checkout_url };
@@ -243,12 +249,10 @@ export class PurchaseService {
         return;
       }
 
-      // --- [CHANGE 3 START] ---
       // Get the userId and contentId directly from the pending transaction record
       // instead of trying to parse them from the tx_ref string.
       const { userId, contentId } = pendingTx;
       const { amount } = verificationResponse.data.data;
-      // --- [CHANGE 3 END] ---
 
       const user = await this.userRepository.findOneBy({ id: userId });
       const content = await this.contentRepository.findOneBy({ id: contentId });
