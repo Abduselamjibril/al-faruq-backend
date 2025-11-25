@@ -1,8 +1,5 @@
-// src/users/users.service.ts
-
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-// --- FIX: Import ILike for case-insensitive queries ---
 import { ILike, Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 
@@ -18,10 +15,7 @@ export class UsersService {
     return this.usersRepository.save(user);
   }
 
-  // --- UPDATED: This method now performs a case-insensitive search ---
   async findByEmail(email: string): Promise<User | undefined> {
-    // Using ILike ensures the query is case-insensitive at the database level.
-    // e.g., 'John.Doe@Example.com' will match a record of 'john.doe@example.com'
     return (
       (await this.usersRepository.findOne({ where: { email: ILike(email) } })) ??
       undefined
@@ -49,7 +43,7 @@ export class UsersService {
     } else if (provider === 'facebook') {
       whereCondition = { facebookId: providerId };
     } else {
-      return undefined; // Or throw an error for unsupported providers
+      return undefined;
     }
     return (
       (await this.usersRepository.findOne({ where: whereCondition })) ??
@@ -57,12 +51,9 @@ export class UsersService {
     );
   }
 
-  // --- UPDATED: This method now normalizes the email before searching ---
   async findByLoginIdentifier(identifier: string): Promise<User | undefined> {
     const isEmail = identifier.includes('@');
     if (isEmail) {
-      // We still normalize the identifier here for consistency, even though
-      // findByEmail is now case-insensitive. This is a robust pattern.
       return this.findByEmail(identifier.toLowerCase());
     }
     return this.findByPhoneNumber(identifier);
@@ -75,5 +66,36 @@ export class UsersService {
     }
     Object.assign(user, attrs);
     return this.usersRepository.save(user);
+  }
+
+  async findAll(): Promise<User[]> {
+    return this.usersRepository.find({
+      order: {
+        id: 'ASC',
+      },
+    });
+  }
+
+  async remove(id: number): Promise<void> {
+    const result = await this.usersRepository.delete(id);
+    if (result.affected === 0) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+  }
+
+  // --- NEW METHOD FOR SEARCHING USERS ---
+  async search(term: string): Promise<User[]> {
+    return this.usersRepository.find({
+      where: [
+        // The search term will be matched against these four fields
+        { firstName: ILike(`%${term}%`) },
+        { lastName: ILike(`%${term}%`) },
+        { email: ILike(`%${term}%`) },
+        { phoneNumber: ILike(`%${term}%`) },
+      ],
+      order: {
+        id: 'ASC',
+      },
+    });
   }
 }

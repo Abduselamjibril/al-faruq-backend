@@ -34,6 +34,11 @@ export class PurchaseService {
   private readonly chapaSecretKey: string;
   private readonly apiDomain: string;
   private readonly flutterReturnUrl: string;
+  // --- [CHANGE 1 START] ---
+  // Add properties to hold the new configuration values
+  private readonly skylinkSubaccountId: string;
+  private readonly skylinkSplitPercentage: number;
+  // --- [CHANGE 1 END] ---
 
   constructor(
     @InjectRepository(Purchase)
@@ -47,21 +52,28 @@ export class PurchaseService {
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
   ) {
-    // --- START OF THE FIX ---
     const secretKey = this.configService.get<string>('CHAPA_SECRET_KEY');
+    // --- [CORRECTED LINES START] ---
     const domain = this.configService.get<string>('API_DOMAIN');
     const returnUrl = this.configService.get<string>('FLUTTER_RETURN_URL');
+    
+    const subaccountId = this.configService.get<string>('SKYLINK_CHAPA_SUBACCOUNT_ID');
+    const splitPercentage = this.configService.get<number>('SKYLINK_SPLIT_PERCENTAGE');
+    // --- [CORRECTED LINES END] ---
 
-    if (!secretKey || !domain || !returnUrl) {
+    // Update the validation check to include the new required variables
+    if (!secretKey || !domain || !returnUrl || !subaccountId || !splitPercentage) {
       throw new Error(
-        'CHAPA_SECRET_KEY, API_DOMAIN, or FLUTTER_RETURN_URL are not defined in environment variables',
+        'One or more required environment variables are not defined: CHAPA_SECRET_KEY, API_DOMAIN, FLUTTER_RETURN_URL, SKYLINK_CHAPA_SUBACCOUNT_ID, SKYLINK_SPLIT_PERCENTAGE',
       );
     }
 
     this.chapaSecretKey = secretKey;
     this.apiDomain = domain;
     this.flutterReturnUrl = returnUrl;
-    // --- END OF THE FIX ---
+    // Assign the new properties
+    this.skylinkSubaccountId = subaccountId;
+    this.skylinkSplitPercentage = splitPercentage;
   }
 
   async initiatePurchase(
@@ -98,7 +110,8 @@ export class PurchaseService {
       'hex',
     )}`;
 
-    const chapaRequestBody = {
+    // Change chapaRequestBody to type 'any' to allow adding the 'splits' property
+    const chapaRequestBody: any = {
       amount: price.toString(),
       currency: 'ETB',
       email: user.email || '',
@@ -111,10 +124,20 @@ export class PurchaseService {
       'customization[description]': `Payment for ${content.title}`,
     };
 
+    // Add the split payment instructions to the request body.
+    // This object tells Chapa to perform the automatic 70/30 split.
+    chapaRequestBody.splits = {
+      subaccount: this.skylinkSubaccountId,
+      transaction_charge_type: 'percentage',
+      // Note: Chapa's API requires the value as a decimal (e.g., 0.30),
+      // so we divide the percentage from the .env file by 100.
+      transaction_charge: this.skylinkSplitPercentage / 100,
+    };
+
     try {
       const response = await firstValueFrom(
         this.httpService.post<ChapaTransactionResponse>(
-          'https://api.chaa.co/v1/transaction/initialize',
+          'https://api.chapa.co/v1/transaction/initialize',
           chapaRequestBody,
           {
             headers: { Authorization: `Bearer ${this.chapaSecretKey}` },
