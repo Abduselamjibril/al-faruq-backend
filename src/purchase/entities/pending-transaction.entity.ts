@@ -1,3 +1,5 @@
+// src/purchase/entities/pending-transaction.entity.ts
+
 import {
   BaseEntity,
   Column,
@@ -15,7 +17,17 @@ export class PendingTransaction extends BaseEntity {
 
   @Column({ type: 'integer' })
   durationDays: number;
-  
+
+  // --- [CHANGE 1 START] ---
+  // Add userId to store which user is making the purchase.
+  @Column({ type: 'integer' })
+  userId: number;
+
+  // Add contentId to store which content is being purchased.
+  @Column({ type: 'uuid' })
+  contentId: string;
+  // --- [CHANGE 1 END] ---
+
   // This helps with cleanup. We can have a background job that cleans up
   // any pending transactions older than a few hours that never completed.
   @CreateDateColumn()

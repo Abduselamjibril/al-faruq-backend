@@ -56,13 +56,23 @@ export class PurchaseService {
     // --- [CORRECTED LINES START] ---
     const domain = this.configService.get<string>('API_DOMAIN');
     const returnUrl = this.configService.get<string>('FLUTTER_RETURN_URL');
-    
-    const subaccountId = this.configService.get<string>('SKYLINK_CHAPA_SUBACCOUNT_ID');
-    const splitPercentage = this.configService.get<number>('SKYLINK_SPLIT_PERCENTAGE');
+
+    const subaccountId = this.configService.get<string>(
+      'SKYLINK_CHAPA_SUBACCOUNT_ID',
+    );
+    const splitPercentage = this.configService.get<number>(
+      'SKYLINK_SPLIT_PERCENTAGE',
+    );
     // --- [CORRECTED LINES END] ---
 
     // Update the validation check to include the new required variables
-    if (!secretKey || !domain || !returnUrl || !subaccountId || !splitPercentage) {
+    if (
+      !secretKey ||
+      !domain ||
+      !returnUrl ||
+      !subaccountId ||
+      !splitPercentage
+    ) {
       throw new Error(
         'One or more required environment variables are not defined: CHAPA_SECRET_KEY, API_DOMAIN, FLUTTER_RETURN_URL, SKYLINK_CHAPA_SUBACCOUNT_ID, SKYLINK_SPLIT_PERCENTAGE',
       );
@@ -106,9 +116,11 @@ export class PurchaseService {
       throw new BadRequestException('Invalid duration or price calculation.');
     }
 
-    const tx_ref = `alfaruq-${userId}-${contentId}-${randomBytes(8).toString(
-      'hex',
-    )}`;
+    // --- [CHANGE 1 START] ---
+    // Generate a new, shorter tx_ref that is guaranteed to be under the 50-character limit.
+    // The length will be 3 + 32 = 35 characters.
+    const tx_ref = `tx-${randomBytes(16).toString('hex')}`;
+    // --- [CHANGE 1 END] ---
 
     // Change chapaRequestBody to type 'any' to allow adding the 'splits' property
     const chapaRequestBody: any = {
@@ -154,10 +166,15 @@ export class PurchaseService {
         );
       }
 
+      // --- [CHANGE 2 START] ---
+      // Create the pending transaction record with the new userId and contentId fields.
       const pendingTx = this.pendingTransactionRepository.create({
         tx_ref: tx_ref,
         durationDays: durationDays,
+        userId: userId,
+        contentId: contentId,
       });
+      // --- [CHANGE 2 END] ---
       await this.pendingTransactionRepository.save(pendingTx);
 
       return { checkoutUrl: response.data.data.checkout_url };
@@ -226,16 +243,19 @@ export class PurchaseService {
         return;
       }
 
-      const [, userIdStr, contentId] = tx_ref.split('-');
-      const userId = parseInt(userIdStr, 10);
+      // --- [CHANGE 3 START] ---
+      // Get the userId and contentId directly from the pending transaction record
+      // instead of trying to parse them from the tx_ref string.
+      const { userId, contentId } = pendingTx;
       const { amount } = verificationResponse.data.data;
+      // --- [CHANGE 3 END] ---
 
       const user = await this.userRepository.findOneBy({ id: userId });
       const content = await this.contentRepository.findOneBy({ id: contentId });
 
       if (!user || !content) {
         console.error(
-          `Invalid user or content ID parsed from tx_ref: ${tx_ref}`,
+          `Invalid user or content ID found in pending transaction for tx_ref: ${tx_ref}`,
         );
         return;
       }
