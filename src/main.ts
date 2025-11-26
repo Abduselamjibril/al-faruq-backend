@@ -37,7 +37,7 @@ async function bootstrap() {
   // Get the CORS origin from the .env file.
   // If it's not set, it will default to allowing localhost for development.
   const corsOrigin = configService.get<string>('CORS_ORIGIN');
-  
+
   if (corsOrigin) {
     // If CORS_ORIGIN is set in the .env file
     app.enableCors({
@@ -58,7 +58,6 @@ async function bootstrap() {
   }
   // --- [CHANGE 2 END] ---
 
-
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -73,7 +72,9 @@ async function bootstrap() {
   // --- SWAGGER (OPENAPI) SETUP ---
   const config = new DocumentBuilder()
     .setTitle('Alfaruq API')
-    .setDescription('The official API documentation for the Alfaruq application.')
+    .setDescription(
+      'The official API documentation for the Alfaruq application.',
+    )
     .setVersion('1.0')
     .addBearerAuth() // This is important for routes that require a JWT
     .build();
@@ -82,8 +83,11 @@ async function bootstrap() {
   SwaggerModule.setup('api-docs', app, document); // Your docs will be at http://localhost:3000/api-docs
   // --- END OF SWAGGER SETUP ---
 
-  const seeder = app.get(SeedService);
-  await seeder.seedDatabase();
+  // --- [CHANGE 1 START] ---
+  // The seeder is temporarily disabled to prevent the application from crashing on startup.
+  // const seeder = app.get(SeedService);
+  // await seeder.seedDatabase();
+  // --- [CHANGE 1 END] ---
 
   await app.listen(5000);
   console.log(`Application is now running on: ${await app.getUrl()}`);
