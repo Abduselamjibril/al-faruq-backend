@@ -4,6 +4,7 @@ import {
   BadRequestException,
   Injectable,
   InternalServerErrorException,
+  Logger, // --- [CHANGE 1] --- Import Logger
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -31,14 +32,14 @@ interface ChapaTransactionResponse {
 
 @Injectable()
 export class PurchaseService {
+  // --- [CHANGE 2] --- Create a logger instance for this service
+  private readonly logger = new Logger(PurchaseService.name);
+
   private readonly chapaSecretKey: string;
   private readonly apiDomain: string;
   private readonly flutterReturnUrl: string;
-  // --- [CHANGE 1 START] ---
-  // Add properties to hold the new configuration values
   private readonly skylinkSubaccountId: string;
   private readonly skylinkSplitPercentage: number;
-  // --- [CHANGE 1 END] ---
 
   constructor(
     @InjectRepository(Purchase)
@@ -52,20 +53,20 @@ export class PurchaseService {
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
   ) {
+    this.logger.log('PurchaseService constructor: Loading environment variables...');
     const secretKey = this.configService.get<string>('CHAPA_SECRET_KEY');
-    // --- [CORRECTED LINES START] ---
     const domain = this.configService.get<string>('API_DOMAIN');
     const returnUrl = this.configService.get<string>('FLUTTER_RETURN_URL');
-
     const subaccountId = this.configService.get<string>(
       'SKYLINK_CHAPA_SUBACCOUNT_ID',
     );
     const splitPercentage = this.configService.get<number>(
       'SKYLINK_SPLIT_PERCENTAGE',
     );
-    // --- [CORRECTED LINES END] ---
 
-    // Update the validation check to include the new required variables
+    this.logger.debug(`Loaded SKYLINK_CHAPA_SUBACCOUNT_ID: ${subaccountId}`);
+    this.logger.debug(`Loaded SKYLINK_SPLIT_PERCENTAGE: ${splitPercentage}`);
+
     if (
       !secretKey ||
       !domain ||
@@ -73,6 +74,7 @@ export class PurchaseService {
       !subaccountId ||
       !splitPercentage
     ) {
+      this.logger.error('CRITICAL: One or more required environment variables are missing!');
       throw new Error(
         'One or more required environment variables are not defined: CHAPA_SECRET_KEY, API_DOMAIN, FLUTTER_RETURN_URL, SKYLINK_CHAPA_SUBACCOUNT_ID, SKYLINK_SPLIT_PERCENTAGE',
       );
@@ -81,31 +83,32 @@ export class PurchaseService {
     this.chapaSecretKey = secretKey;
     this.apiDomain = domain;
     this.flutterReturnUrl = returnUrl;
-    // Assign the new properties
     this.skylinkSubaccountId = subaccountId;
     this.skylinkSplitPercentage = splitPercentage;
+    this.logger.log('PurchaseService constructor: Environment variables loaded successfully.');
   }
 
   async initiatePurchase(
     userId: number,
     initiatePurchaseDto: InitiatePurchaseDto,
   ) {
+    this.logger.log(`[initiatePurchase] Starting for User ID: ${userId}`);
     const { contentId, durationDays } = initiatePurchaseDto;
+    this.logger.debug(`[initiatePurchase] Content ID: ${contentId}, Duration: ${durationDays} days`);
 
     const user = await this.userRepository.findOneBy({ id: userId });
     if (!user) {
+      this.logger.warn(`[initiatePurchase] User with ID ${userId} not found.`);
       throw new NotFoundException(`User with ID ${userId} not found.`);
     }
 
-    // --- [CHANGE 1 START] ---
-    // Add a validation check to ensure the user has an email address.
-    // Chapa requires a valid email to process the transaction.
     if (!user.email) {
+      this.logger.warn(`[initiatePurchase] User ID ${userId} has no email. Aborting.`);
       throw new BadRequestException(
         'User does not have an email address. Please update your profile before making a purchase.',
       );
     }
-    // --- [CHANGE 1 END] ---
+    this.logger.debug(`[initiatePurchase] User ${user.email} found.`);
 
     const content = await this.contentRepository.findOne({
       where: { id: contentId },
@@ -113,28 +116,31 @@ export class PurchaseService {
     });
 
     if (!content) {
+      this.logger.warn(`[initiatePurchase] Content with ID ${contentId} not found.`);
       throw new NotFoundException(`Content with ID ${contentId} not found.`);
     }
     if (!content.isLocked || !content.pricingTier) {
+      this.logger.warn(`[initiatePurchase] Content ${content.title} is not available for purchase.`);
       throw new BadRequestException(
         'This content is not available for purchase.',
       );
     }
+    this.logger.debug(`[initiatePurchase] Content ${content.title} found and is purchasable.`);
 
     const price = this.calculatePrice(content.pricingTier, durationDays);
     if (price <= 0) {
+      this.logger.warn(`[initiatePurchase] Invalid price calculation for duration ${durationDays}. Result: ${price}`);
       throw new BadRequestException('Invalid duration or price calculation.');
     }
+    this.logger.debug(`[initiatePurchase] Calculated price: ${price} ETB`);
 
-    // Generate a new, shorter tx_ref that is guaranteed to be under the 50-character limit.
-    // The length will be 3 + 32 = 35 characters.
     const tx_ref = `tx-${randomBytes(16).toString('hex')}`;
+    this.logger.debug(`[initiatePurchase] Generated tx_ref: ${tx_ref}`);
 
-    // Change chapaRequestBody to type 'any' to allow adding the 'splits' property
     const chapaRequestBody: any = {
       amount: price.toString(),
       currency: 'ETB',
-      email: user.email, // We can now safely use user.email without the fallback
+      email: user.email,
       first_name: user.firstName || '',
       last_name: user.lastName || '',
       tx_ref: tx_ref,
@@ -144,15 +150,15 @@ export class PurchaseService {
       'customization[description]': `Payment for ${content.title}`,
     };
 
-    // Add the split payment instructions to the request body.
-    // This object tells Chapa to perform the automatic 70/30 split.
     chapaRequestBody.splits = {
       subaccount: this.skylinkSubaccountId,
       transaction_charge_type: 'percentage',
-      // Note: Chapa's API requires the value as a decimal (e.g., 0.30),
-      // so we divide the percentage from the .env file by 100.
       transaction_charge: this.skylinkSplitPercentage / 100,
     };
+
+    this.logger.log(`[initiatePurchase] Preparing to send request to Chapa for tx_ref: ${tx_ref}`);
+    // Use JSON.stringify to see the exact payload being sent
+    this.logger.debug(`[initiatePurchase] Chapa Request Body: ${JSON.stringify(chapaRequestBody, null, 2)}`);
 
     try {
       const response = await firstValueFrom(
@@ -165,16 +171,19 @@ export class PurchaseService {
         ),
       );
 
+      this.logger.log(`[initiatePurchase] Received successful response from Chapa for tx_ref: ${tx_ref}`);
+
       if (
         response.data.status !== 'success' ||
         !response.data.data?.checkout_url
       ) {
+        this.logger.error(`[initiatePurchase] Chapa response was not successful for tx_ref: ${tx_ref}`, response.data);
         throw new InternalServerErrorException(
           'Failed to initialize Chapa transaction.',
         );
       }
 
-      // Create the pending transaction record with the new userId and contentId fields.
+      this.logger.debug(`[initiatePurchase] Creating pending transaction record for tx_ref: ${tx_ref}`);
       const pendingTx = this.pendingTransactionRepository.create({
         tx_ref: tx_ref,
         durationDays: durationDays,
@@ -182,14 +191,12 @@ export class PurchaseService {
         contentId: contentId,
       });
       await this.pendingTransactionRepository.save(pendingTx);
+      this.logger.debug(`[initiatePurchase] Pending transaction saved successfully for tx_ref: ${tx_ref}`);
 
       return { checkoutUrl: response.data.data.checkout_url };
     } catch (error) {
       const axiosError = error as { response?: AxiosResponse };
-      console.error(
-        'Chapa Initialization Error:',
-        axiosError.response?.data || error.message,
-      );
+      this.logger.error(`[initiatePurchase] Chapa Initialization Error for tx_ref: ${tx_ref}`, axiosError.response?.data || error.message);
       throw new InternalServerErrorException('Could not initiate payment.');
     }
   }
@@ -218,23 +225,28 @@ export class PurchaseService {
   }
 
   async verifyAndGrantAccess(chapaResponse: any): Promise<void> {
+    this.logger.log('[verifyAndGrantAccess] Webhook received from Chapa.');
+    this.logger.debug(`[verifyAndGrantAccess] Full webhook payload: ${JSON.stringify(chapaResponse, null, 2)}`);
     const { tx_ref } = chapaResponse;
     if (!tx_ref) {
-      console.warn('Chapa webhook called without tx_ref');
+      this.logger.warn('[verifyAndGrantAccess] Webhook called without tx_ref. Aborting.');
       return;
     }
+    this.logger.log(`[verifyAndGrantAccess] Processing webhook for tx_ref: ${tx_ref}`);
 
     const pendingTx = await this.pendingTransactionRepository.findOneBy({
       tx_ref,
     });
     if (!pendingTx) {
-      console.warn(
-        `Webhook for unknown or already processed tx_ref received: ${tx_ref}`,
+      this.logger.warn(
+        `[verifyAndGrantAccess] Webhook for unknown or already processed tx_ref received: ${tx_ref}. Aborting.`,
       );
       return;
     }
+    this.logger.debug(`[verifyAndGrantAccess] Found matching pending transaction for tx_ref: ${tx_ref}`);
 
     try {
+      this.logger.log(`[verifyAndGrantAccess] Verifying transaction with Chapa for tx_ref: ${tx_ref}`);
       const verificationResponse = await firstValueFrom(
         this.httpService.get<ChapaTransactionResponse>(
           `https://api.chapa.co/v1/transaction/verify/${tx_ref}`,
@@ -244,22 +256,25 @@ export class PurchaseService {
         ),
       );
 
+      this.logger.debug(`[verifyAndGrantAccess] Chapa verification response for tx_ref ${tx_ref}: ${JSON.stringify(verificationResponse.data, null, 2)}`);
+
       if (verificationResponse.data.status !== 'success') {
-        console.error(`Chapa verification failed for tx_ref: ${tx_ref}`);
+        this.logger.error(`[verifyAndGrantAccess] Chapa verification FAILED for tx_ref: ${tx_ref}`);
         return;
       }
+      this.logger.log(`[verifyAndGrantAccess] Chapa verification SUCCESSFUL for tx_ref: ${tx_ref}`);
 
-      // Get the userId and contentId directly from the pending transaction record
-      // instead of trying to parse them from the tx_ref string.
       const { userId, contentId } = pendingTx;
       const { amount } = verificationResponse.data.data;
+
+      this.logger.debug(`[verifyAndGrantAccess] Granting access for User ID: ${userId}, Content ID: ${contentId}`);
 
       const user = await this.userRepository.findOneBy({ id: userId });
       const content = await this.contentRepository.findOneBy({ id: contentId });
 
       if (!user || !content) {
-        console.error(
-          `Invalid user or content ID found in pending transaction for tx_ref: ${tx_ref}`,
+        this.logger.error(
+          `[verifyAndGrantAccess] Invalid user or content ID found in pending transaction for tx_ref: ${tx_ref}`,
         );
         return;
       }
@@ -267,6 +282,8 @@ export class PurchaseService {
       const purchasedDurationDays = pendingTx.durationDays;
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + purchasedDurationDays);
+      
+      this.logger.debug(`[verifyAndGrantAccess] Creating purchase record. Price: ${amount}, Expires At: ${expiresAt.toISOString()}`);
 
       const newPurchase = this.purchaseRepository.create({
         user: user,
@@ -277,14 +294,16 @@ export class PurchaseService {
       });
 
       await this.purchaseRepository.save(newPurchase);
+      this.logger.log(`[verifyAndGrantAccess] Purchase record saved for tx_ref: ${tx_ref}`);
 
       await this.pendingTransactionRepository.remove(pendingTx);
+      this.logger.log(`[verifyAndGrantAccess] Pending transaction record removed for tx_ref: ${tx_ref}`);
 
-      console.log(`Access granted to user ${userId} for content ${contentId}`);
+      this.logger.log(`SUCCESS: Access granted to user ${userId} for content ${contentId}`);
     } catch (error) {
       const axiosError = error as { response?: AxiosResponse };
-      console.error(
-        'Chapa Verification/Granting Error:',
+      this.logger.error(
+        `[verifyAndGrantAccess] Chapa Verification/Granting Error for tx_ref: ${tx_ref}`,
         axiosError.response?.data || error.message,
       );
     }
