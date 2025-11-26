@@ -6,6 +6,7 @@ import { AppModule } from './app.module';
 import { SeedService } from './database/seed.service';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import dataSource from './data-source'; // <-- 1. IMPORT THE DATASOURCE
+import { ConfigService } from '@nestjs/config'; // --- [CHANGE 1] --- Import ConfigService
 
 async function bootstrap() {
   // --- 2. RUN DATABASE MIGRATIONS ON STARTUP ---
@@ -26,14 +27,37 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule);
 
+  // --- [CHANGE 2 START] ---
+  // Get the ConfigService instance from the app container
+  const configService = app.get(ConfigService);
+
   // Set a global prefix for all routes, e.g., /api
   app.setGlobalPrefix('api');
 
-  app.enableCors({
-    origin: /localhost:\d+$/, // Matches localhost on any port
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-    credentials: true,
-  });
+  // Get the CORS origin from the .env file.
+  // If it's not set, it will default to allowing localhost for development.
+  const corsOrigin = configService.get<string>('CORS_ORIGIN');
+  
+  if (corsOrigin) {
+    // If CORS_ORIGIN is set in the .env file
+    app.enableCors({
+      // The value will be '*' for production, allowing all origins.
+      origin: corsOrigin === '*' ? true : corsOrigin.split(','),
+      methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+      credentials: true,
+    });
+    console.log(`CORS enabled for origin(s): ${corsOrigin}`);
+  } else {
+    // Default behavior if CORS_ORIGIN is not set (for local development)
+    app.enableCors({
+      origin: /localhost:\d+$/, // Matches localhost on any port
+      methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+      credentials: true,
+    });
+    console.log('CORS enabled for origin: localhost');
+  }
+  // --- [CHANGE 2 END] ---
+
 
   app.useGlobalPipes(
     new ValidationPipe({
