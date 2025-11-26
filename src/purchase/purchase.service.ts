@@ -4,7 +4,7 @@ import {
   BadRequestException,
   Injectable,
   InternalServerErrorException,
-  Logger, // --- [CHANGE 1] --- Import Logger
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -32,7 +32,6 @@ interface ChapaTransactionResponse {
 
 @Injectable()
 export class PurchaseService {
-  // --- [CHANGE 2] --- Create a logger instance for this service
   private readonly logger = new Logger(PurchaseService.name);
 
   private readonly chapaSecretKey: string;
@@ -137,6 +136,15 @@ export class PurchaseService {
     const tx_ref = `tx-${randomBytes(16).toString('hex')}`;
     this.logger.debug(`[initiatePurchase] Generated tx_ref: ${tx_ref}`);
 
+    // --- [CHANGE 1 START] ---
+    // Refine the split calculation to be cleaner and create the splits object
+    const transactionCharge = this.skylinkSplitPercentage / 100;
+    const splits = {
+      subaccount: this.skylinkSubaccountId,
+      transaction_charge_type: 'percentage',
+      transaction_charge: transactionCharge,
+    };
+    
     const chapaRequestBody: any = {
       amount: price.toString(),
       currency: 'ETB',
@@ -148,16 +156,11 @@ export class PurchaseService {
       return_url: this.flutterReturnUrl,
       'customization[title]': 'Al-Faruq Content Purchase',
       'customization[description]': `Payment for ${content.title}`,
+      splits: splits, // Add the cleanly created splits object
     };
-
-    chapaRequestBody.splits = {
-      subaccount: this.skylinkSubaccountId,
-      transaction_charge_type: 'percentage',
-      transaction_charge: this.skylinkSplitPercentage / 100,
-    };
+    // --- [CHANGE 1 END] ---
 
     this.logger.log(`[initiatePurchase] Preparing to send request to Chapa for tx_ref: ${tx_ref}`);
-    // Use JSON.stringify to see the exact payload being sent
     this.logger.debug(`[initiatePurchase] Chapa Request Body: ${JSON.stringify(chapaRequestBody, null, 2)}`);
 
     try {
@@ -255,8 +258,12 @@ export class PurchaseService {
           },
         ),
       );
-
-      this.logger.debug(`[verifyAndGrantAccess] Chapa verification response for tx_ref ${tx_ref}: ${JSON.stringify(verificationResponse.data, null, 2)}`);
+        
+      // --- [CHANGE 2 START] ---
+      // Add a detailed log of the verification response data. This might contain clues.
+      this.logger.log(`[verifyAndGrantAccess] Full verification data for tx_ref ${tx_ref}:`);
+      this.logger.log(JSON.stringify(verificationResponse.data, null, 2));
+      // --- [CHANGE 2 END] ---
 
       if (verificationResponse.data.status !== 'success') {
         this.logger.error(`[verifyAndGrantAccess] Chapa verification FAILED for tx_ref: ${tx_ref}`);
