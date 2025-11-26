@@ -1,5 +1,3 @@
-// src/notifications/notifications.controller.ts
-
 import {
   Controller,
   Post,
@@ -8,7 +6,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
-  Delete, // <-- 1. Import decorators for DELETE
+  Delete,
   Param,
   ParseIntPipe,
 } from '@nestjs/common';
@@ -25,17 +23,36 @@ import {
   ApiResponse,
 } from '@nestjs/swagger';
 
-@ApiTags('Notifications (Admin)')
+// --- UPDATED ApiTags to cover both Admin and User roles ---
+@ApiTags('Notifications (Admin)', 'Notifications (User)')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(RoleName.ADMIN)
 @Controller('notifications')
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
+  // --- NEW ENDPOINT FOR REGULAR USERS ---
+  @Get()
+  @UseGuards(JwtAuthGuard) // Protected by JWT, but NOT RolesGuard
+  @ApiOperation({ summary: 'Get notification history for the current user' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns a list of all broadcast notifications sent.',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  findAllForUser() {
+    // This endpoint is for users, so it reuses the getHistory logic.
+    // In a more complex app, you might have user-specific notifications.
+    return this.notificationsService.getHistory();
+  }
+  // --- END OF NEW ENDPOINT ---
+
+  // --- ADMIN-ONLY ENDPOINTS ARE BELOW ---
+
   @Post('broadcast')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(RoleName.ADMIN)
   @HttpCode(HttpStatus.ACCEPTED)
-  @ApiOperation({ summary: 'Send a broadcast notification to all users' })
+  @ApiOperation({ summary: 'Send a broadcast notification to all users (Admin Only)' })
   @ApiResponse({
     status: 202,
     description:
@@ -54,7 +71,9 @@ export class NotificationsController {
   }
 
   @Get('history')
-  @ApiOperation({ summary: 'Get the history of all sent broadcast notifications' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(RoleName.ADMIN)
+  @ApiOperation({ summary: 'Get the history of all sent broadcast notifications (Admin Only)' })
   @ApiResponse({
     status: 200,
     description: 'Returns a list of past notifications.',
@@ -65,10 +84,11 @@ export class NotificationsController {
     return this.notificationsService.getHistory();
   }
 
-  // --- NEW DELETE ENDPOINT ---
   @Delete('history/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(RoleName.ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Delete a notification from the history' })
+  @ApiOperation({ summary: 'Delete a notification from the history (Admin Only)' })
   @ApiResponse({
     status: 204,
     description: 'Notification history item successfully deleted.',

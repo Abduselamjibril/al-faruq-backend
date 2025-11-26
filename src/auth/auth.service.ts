@@ -1,5 +1,3 @@
-// src/auth/auth.service.ts
-
 import {
   BadRequestException,
   ConflictException,
@@ -17,6 +15,7 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 import { MailService } from '../mail/mail.service';
 import { RolesService } from '../roles/roles.service';
 import { RoleName } from '../roles/entities/role.entity';
+import { ChangeAdminCredentialsDto } from './dto/change-admin-credentials.dto';
 
 export interface SocialProfile {
   provider: 'google' | 'facebook';
@@ -48,7 +47,6 @@ export class AuthService {
       throw new BadRequestException('Email not provided by the social provider.');
     }
 
-    // --- FIX: Normalize email from social provider to lowercase ---
     const lowercasedEmail = profile.email.toLowerCase();
 
     const existingUser = await this.usersService.findByEmail(lowercasedEmail);
@@ -70,7 +68,6 @@ export class AuthService {
     }
 
     const newUser = {
-      // --- FIX: Store the normalized email ---
       email: lowercasedEmail,
       firstName: profile.firstName,
       lastName: profile.lastName,
@@ -103,7 +100,6 @@ export class AuthService {
       }
     }
 
-    // --- FIX: Normalize email to lowercase before checking and saving ---
     const lowercasedEmail = email.toLowerCase();
 
     const existingEmail = await this.usersService.findByEmail(lowercasedEmail);
@@ -122,7 +118,6 @@ export class AuthService {
       const user = await this.usersService.create({
         ...rest,
         phoneNumber,
-        // --- FIX: Store the normalized email ---
         email: lowercasedEmail,
         password: hashedPassword,
         authProvider: AuthProvider.LOCAL,
@@ -135,7 +130,6 @@ export class AuthService {
   }
 
   async validateUser(loginIdentifier: string, pass: string): Promise<any> {
-    // No change is needed here because findByLoginIdentifier in UsersService now handles normalization.
     const user =
       await this.usersService.findByLoginIdentifier(loginIdentifier);
 
@@ -158,7 +152,6 @@ export class AuthService {
   }
 
   async requestPasswordReset(email: string): Promise<void> {
-    // --- FIX: Normalize email to lowercase before searching ---
     const lowercasedEmail = email.toLowerCase();
     const user = await this.usersService.findByEmail(lowercasedEmail);
 
@@ -179,7 +172,6 @@ export class AuthService {
   async resetPassword(resetDto: ResetPasswordDto): Promise<void> {
     const { email, otp, newPassword } = resetDto;
 
-    // --- FIX: Normalize email to lowercase before searching ---
     const lowercasedEmail = email.toLowerCase();
     const user = await this.usersService.findByEmail(lowercasedEmail);
 
@@ -228,5 +220,37 @@ export class AuthService {
 
     const hashedNewPassword = await bcrypt.hash(newPassword, 10);
     await this.usersService.update(userId, { password: hashedNewPassword });
+  }
+
+  // --- NEW METHOD FOR ADMIN SELF-SERVICE ---
+  async changeAdminCredentials(
+    adminId: number,
+    changeDto: ChangeAdminCredentialsDto,
+  ): Promise<User> {
+    const { email, newPassword, confirmPassword } = changeDto;
+    const dataToUpdate: Partial<User> = {};
+
+    if (!email && !newPassword) {
+      throw new BadRequestException('At least one field (email or newPassword) must be provided.');
+    }
+
+    if (newPassword) {
+      if (newPassword !== confirmPassword) {
+        throw new BadRequestException('Passwords do not match');
+      }
+      dataToUpdate.password = await bcrypt.hash(newPassword, 10);
+    }
+
+    if (email) {
+      const lowercasedEmail = email.toLowerCase();
+      const existingUser = await this.usersService.findByEmail(lowercasedEmail);
+      // Check if the email is already taken by another user
+      if (existingUser && existingUser.id !== adminId) {
+        throw new ConflictException('Email already in use by another account');
+      }
+      dataToUpdate.email = lowercasedEmail;
+    }
+
+    return this.usersService.update(adminId, dataToUpdate);
   }
 }

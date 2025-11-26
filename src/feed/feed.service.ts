@@ -1,3 +1,5 @@
+// src/feed/feed.service.ts
+
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThan } from 'typeorm';
@@ -26,8 +28,6 @@ export class FeedService {
   }
 
   async getContentForUser(contentId: string, userId: number): Promise<Content> {
-    // --- THIS IS THE NEW, ROBUST LOGIC ---
-
     // Step 1: Fetch the main content item first.
     const content = await this.contentRepository.findOne({
       where: { id: contentId },
@@ -55,23 +55,44 @@ export class FeedService {
       content.children = seasons;
     }
 
-    // Now the 'content' object is fully and safely constructed.
-    // The rest of the logic remains the same.
+    // --- [CHANGE 1 START] ---
+    // This is the new, improved logic for handling user-specific access.
 
+    // If the content is not locked globally, return it as is.
     if (!content.isLocked) {
       return content;
     }
 
+    // If the content IS locked, check if this specific user has access.
     const hasAccess = await this.checkUserAccess(contentId, userId);
 
+    // If the user has access, create a modified copy for the response.
     if (hasAccess) {
-      return content;
+      // We create a deep copy to avoid modifying the original object in memory.
+      const unlockedContentForUser = JSON.parse(JSON.stringify(content));
+
+      // Explicitly set isLocked to false for this user's response.
+      // The videoUrl is already present, so the user gets full access.
+      unlockedContentForUser.isLocked = false;
+      
+      // The pricingTier is not needed if the content is presented as unlocked.
+      // This makes the response cleaner for the frontend developer.
+      unlockedContentForUser.pricingTier = null;
+
+      return unlockedContentForUser;
     }
 
+    // If the user does NOT have access, sanitize the content.
+    // The original `sanitizeContent` method already keeps `isLocked: true`
+    // and sets the video URLs to null, which is what we want.
     return this.sanitizeContent(content);
+    // --- [CHANGE 1 END] ---
   }
 
-  private async checkUserAccess(contentId: string, userId: number): Promise<boolean> {
+  private async checkUserAccess(
+    contentId: string,
+    userId: number,
+  ): Promise<boolean> {
     const now = new Date();
     const purchase = await this.purchaseRepository.findOne({
       where: {
@@ -85,15 +106,18 @@ export class FeedService {
   }
 
   private sanitizeContent(content: Content): Content {
+    // We create a deep copy to ensure we don't accidentally modify the original object.
     const sanitizedContent = JSON.parse(JSON.stringify(content));
 
+    // For single video content types, nullify the main video URL.
     if (
       sanitizedContent.type === ContentType.MOVIE ||
       sanitizedContent.type === ContentType.MUSIC_VIDEO
     ) {
       sanitizedContent.videoUrl = null;
     }
-    
+
+    // For series, loop through and nullify all episode video URLs.
     if (sanitizedContent.children) {
       for (const season of sanitizedContent.children) {
         if (season.children) {
@@ -104,6 +128,7 @@ export class FeedService {
       }
     }
 
+    // The isLocked status is already `true` from the database, so we don't need to change it.
     return sanitizedContent;
   }
 }

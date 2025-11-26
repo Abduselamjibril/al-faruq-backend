@@ -1,4 +1,3 @@
-// src/auth/auth.controller.ts
 import {
   Body,
   Controller,
@@ -34,9 +33,10 @@ import {
   ApiResponse,
   ApiBearerAuth,
   ApiExcludeEndpoint,
-  ApiBody, // <-- IMPORT THIS
+  ApiBody,
 } from '@nestjs/swagger';
-import { LoginUserDto } from './dto/login-user.dto'; // <-- AND IMPORT THIS
+import { LoginUserDto } from './dto/login-user.dto';
+import { ChangeAdminCredentialsDto } from './dto/change-admin-credentials.dto';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -60,9 +60,8 @@ export class AuthController {
     return this.authService.register(registerDto);
   }
 
-  // --- THIS IS THE CORRECTED METHOD ---
   @ApiOperation({ summary: 'Log in a user' })
-  @ApiBody({ type: LoginUserDto }) // <-- ADD THIS DECORATOR
+  @ApiBody({ type: LoginUserDto })
   @ApiResponse({
     status: 200,
     description: 'Login successful, returns JWT token.',
@@ -74,13 +73,9 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @UseGuards(LocalAuthGuard)
   @Post('login')
-  async login(@Request() req, @Body() _loginDto: LoginUserDto) { // <-- ADD @Body() PARAMETER
-    // The LocalAuthGuard has already validated the user and attached it to req.user.
-    // The _loginDto parameter is not used in the function body, but its presence is
-    // what allows Swagger to generate the correct documentation and UI.
+  async login(@Request() req, @Body() _loginDto: LoginUserDto) {
     return this.authService.login(req.user);
   }
-  // --- END OF CORRECTION ---
 
   @ApiOperation({ summary: 'Initiate Google SSO flow' })
   @ApiResponse({
@@ -93,7 +88,7 @@ export class AuthController {
     // Guard handles the redirect
   }
 
-  @ApiExcludeEndpoint() // Exclude this from docs as it's a callback handled by the browser
+  @ApiExcludeEndpoint()
   @Get('google/callback')
   @UseGuards(GoogleAuthGuard)
   async googleAuthRedirect(@Request() req, @Res() res: Response) {
@@ -113,7 +108,7 @@ export class AuthController {
     // Guard handles the redirect
   }
 
-  @ApiExcludeEndpoint() // Exclude this from docs as it's a callback handled by the browser
+  @ApiExcludeEndpoint()
   @Get('facebook/callback')
   @UseGuards(FacebookAuthGuard)
   async facebookAuthRedirect(@Request() req, @Res() res: Response) {
@@ -174,6 +169,39 @@ export class AuthController {
   getProfile(@Request() req) {
     return this.usersService.findById(req.user.id);
   }
+
+  // --- ADMIN-ONLY ENDPOINTS ---
+
+  @Get('admin/profile')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(RoleName.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Get the current admin's profile (Admin Only)" })
+  @ApiResponse({ status: 200, description: 'Returns the admin profile.' })
+  @ApiResponse({ status: 403, description: 'Forbidden.' })
+  getAdminProfile(@Request() req) {
+    return this.usersService.findById(req.user.id);
+  }
+
+  // --- THIS ENDPOINT HAS BEEN UPDATED ---
+  @Patch('admin/change-credentials')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(RoleName.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Change the current admin's email or password (Admin Only)" })
+  // ADDED ApiBody decorator for a clear example
+  @ApiBody({ type: ChangeAdminCredentialsDto })
+  @ApiResponse({ status: 200, description: 'Admin credentials updated successfully.' })
+  @ApiResponse({ status: 400, description: 'Invalid input data.' })
+  @ApiResponse({ status: 403, description: 'Forbidden.' })
+  @ApiResponse({ status: 409, description: 'New email is already in use.' })
+  changeAdminCredentials(
+    @Request() req,
+    @Body() changeAdminCredentialsDto: ChangeAdminCredentialsDto,
+  ) {
+    return this.authService.changeAdminCredentials(req.user.id, changeAdminCredentialsDto);
+  }
+  // --- END OF UPDATE ---
 
   @ApiOperation({ summary: 'Access an admin-only protected route' })
   @ApiBearerAuth()
