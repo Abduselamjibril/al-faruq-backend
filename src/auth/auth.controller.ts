@@ -49,8 +49,6 @@ export class AuthController {
     private readonly configService: ConfigService,
   ) {}
 
-  // --- PUBLIC ENDPOINTS (No Guards) ---
-
   @ApiOperation({ summary: 'Register a new user' })
   @ApiResponse({ status: 201, description: 'User successfully created.' })
   @ApiResponse({ status: 400, description: 'Invalid input data.' })
@@ -63,6 +61,7 @@ export class AuthController {
     return this.authService.register(registerDto);
   }
 
+  // --- THIS METHOD HAS BEEN UPDATED ---
   @ApiOperation({ summary: 'Log in a user' })
   @ApiBody({ type: LoginUserDto })
   @ApiResponse({
@@ -73,12 +72,16 @@ export class AuthController {
     status: 401,
     description: 'Unauthorized, invalid credentials.',
   })
+  @ApiResponse({ status: 403, description: 'Device limit reached.' }) // New error response
   @HttpCode(HttpStatus.OK)
   @UseGuards(LocalAuthGuard)
   @Post('login')
   async login(@Request() req, @Body() _loginDto: LoginUserDto) {
+    // Check device limit BEFORE logging in
+    await this.authService.checkDeviceLimit(req.user.id);
     return this.authService.login(req.user);
   }
+  // --- END OF UPDATE ---
 
   @ApiOperation({ summary: 'Request a password reset OTP' })
   @ApiResponse({
@@ -104,8 +107,6 @@ export class AuthController {
     await this.authService.resetPassword(resetPasswordDto);
     return { message: 'Password has been reset successfully.' };
   }
-
-  // --- SSO ENDPOINTS (Specific Guards) ---
 
   @ApiOperation({ summary: 'Initiate Google SSO flow' })
   @ApiResponse({
@@ -147,8 +148,6 @@ export class AuthController {
     res.redirect(`${frontendUrl}/auth/callback?token=${access_token}`);
   }
 
-  // --- USER-ONLY ENDPOINTS ---
-
   @ApiOperation({ summary: 'Change password for the logged-in user (User Only)' })
   @ApiBearerAuth()
   @ApiResponse({ status: 200, description: 'Password changed successfully.' })
@@ -158,8 +157,8 @@ export class AuthController {
   })
   @ApiResponse({ status: 403, description: 'Forbidden.' })
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard, RolesGuard) // <-- ADDED RolesGuard
-  @Roles(RoleName.USER) // <-- ADDED USER Role
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(RoleName.USER)
   @Patch('change-password')
   async changePassword(
     @Request() req,
@@ -174,16 +173,16 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Returns the user profile.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   @ApiResponse({ status: 403, description: 'Forbidden.' })
-  @UseGuards(JwtAuthGuard, RolesGuard) // <-- ADDED RolesGuard
-  @Roles(RoleName.USER) // <-- ADDED USER Role
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(RoleName.USER)
   @Get('profile')
   getProfile(@Request() req) {
     return this.usersService.findById(req.user.id);
   }
 
   @Delete('profile')
-  @UseGuards(JwtAuthGuard, RolesGuard) // <-- ADDED RolesGuard
-  @Roles(RoleName.USER) // <-- ADDED USER Role
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(RoleName.USER)
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete the account of the current logged-in user (User Only)' })

@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   InternalServerErrorException,
   UnauthorizedException,
@@ -16,6 +17,7 @@ import { MailService } from '../mail/mail.service';
 import { RolesService } from '../roles/roles.service';
 import { RoleName } from '../roles/entities/role.entity';
 import { ChangeAdminCredentialsDto } from './dto/change-admin-credentials.dto';
+import { DevicesService } from '../devices/devices.service'; // --- 1. IMPORT DevicesService ---
 
 export interface SocialProfile {
   provider: 'google' | 'facebook';
@@ -32,6 +34,7 @@ export class AuthService {
     private jwtService: JwtService,
     private mailService: MailService,
     private rolesService: RolesService,
+    private devicesService: DevicesService, // --- 2. INJECT DevicesService ---
   ) {}
 
   async validateSocialLogin(profile: SocialProfile): Promise<User> {
@@ -151,6 +154,15 @@ export class AuthService {
     };
   }
 
+  // --- 3. NEW METHOD TO CHECK DEVICE LIMIT ---
+  async checkDeviceLimit(userId: number): Promise<void> {
+    const deviceCount = await this.devicesService.countByUserId(userId);
+    // We check for 3 or more. You can change this number easily.
+    if (deviceCount >= 3) {
+      throw new ForbiddenException('Device limit reached. Please log out from another device.');
+    }
+  }
+
   async requestPasswordReset(email: string): Promise<void> {
     const lowercasedEmail = email.toLowerCase();
     const user = await this.usersService.findByEmail(lowercasedEmail);
@@ -222,7 +234,6 @@ export class AuthService {
     await this.usersService.update(userId, { password: hashedNewPassword });
   }
 
-  // --- NEW METHOD FOR ADMIN SELF-SERVICE ---
   async changeAdminCredentials(
     adminId: number,
     changeDto: ChangeAdminCredentialsDto,
@@ -244,7 +255,6 @@ export class AuthService {
     if (email) {
       const lowercasedEmail = email.toLowerCase();
       const existingUser = await this.usersService.findByEmail(lowercasedEmail);
-      // Check if the email is already taken by another user
       if (existingUser && existingUser.id !== adminId) {
         throw new ConflictException('Email already in use by another account');
       }

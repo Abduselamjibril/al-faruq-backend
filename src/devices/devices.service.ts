@@ -1,8 +1,6 @@
-// src/devices/devices.service.ts
-
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm'; // <-- 1. IMPORT 'In' from typeorm
+import { In, Repository } from 'typeorm';
 import { Device } from './entities/device.entity';
 import { User } from '../users/entities/user.entity';
 
@@ -15,11 +13,6 @@ export class DevicesService {
     private readonly deviceRepository: Repository<Device>,
   ) {}
 
-  /**
-   * Registers a device for a user.
-   * If the token already exists, it updates the associated user.
-   * If it doesn't exist, it creates a new record.
-   */
   async registerDevice(fcmToken: string, user: User): Promise<Device> {
     const existingDevice = await this.deviceRepository.findOne({
       where: { fcmToken },
@@ -41,18 +34,11 @@ export class DevicesService {
     }
   }
 
-  /**
-   * Deletes a device token record for a specific user.
-   * This is used when a user logs out.
-   */
   async deleteDevice(fcmToken: string, userId: number): Promise<void> {
     this.logger.log(`Deleting FCM Token for user ID: ${userId}`);
     await this.deviceRepository.delete({ fcmToken, user: { id: userId } });
   }
 
-  /**
-   * Finds all device tokens for a given user ID.
-   */
   async findTokensByUserId(userId: number): Promise<string[]> {
     const devices = await this.deviceRepository.find({
       where: { user: { id: userId } },
@@ -60,21 +46,22 @@ export class DevicesService {
     return devices.map((device) => device.fcmToken);
   }
 
-  /**
-   * Finds all device tokens for all users.
-   */
+  // --- NEW METHOD TO EFFICIENTLY COUNT DEVICES FOR A USER ---
+  async countByUserId(userId: number): Promise<number> {
+    return this.deviceRepository.count({
+      where: { user: { id: userId } },
+    });
+  }
+  // --- END OF NEW METHOD ---
+
   async findAllTokens(): Promise<string[]> {
     const devices = await this.deviceRepository.find();
     return devices.map((device) => device.fcmToken);
   }
 
-  /**
-   * Deletes a list of tokens from the database.
-   * This is used for cleaning up stale tokens after an FCM send operation.
-   */
   async deleteTokens(tokens: string[]): Promise<void> {
     if (tokens.length === 0) return;
     this.logger.log(`Cleaning up ${tokens.length} stale FCM tokens.`);
-    await this.deviceRepository.delete({ fcmToken: In(tokens) }); // <-- 'In' is now correctly imported
+    await this.deviceRepository.delete({ fcmToken: In(tokens) });
   }
 }

@@ -1,4 +1,3 @@
-// src/auth/auth.module.ts
 import { Module } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
@@ -12,6 +11,7 @@ import { MailModule } from '../mail/mail.module';
 import { RolesModule } from '../roles/roles.module';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { FacebookStrategy } from './strategies/facebook.strategy';
+import { DevicesModule } from '../devices/devices.module';
 
 @Module({
   imports: [
@@ -20,22 +20,25 @@ import { FacebookStrategy } from './strategies/facebook.strategy';
     ConfigModule,
     MailModule,
     RolesModule,
+    DevicesModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: async (configService: ConfigService) => {
         const jwtSecret = configService.get<string>('JWT_SECRET');
-        // --- FIX: Read expiresIn as a number ---
+        // --- THIS IS THE FINAL FIX ---
+        // Read the value as a number from the .env file (e.g., 86400)
         const jwtExpiresIn = configService.get<number>('JWT_EXPIRES_IN');
 
         if (!jwtSecret || jwtExpiresIn === undefined) {
-          throw new Error('JWT configuration is missing in .env file.');
+          throw new Error('JWT configuration (JWT_SECRET or JWT_EXPIRES_IN) is missing or invalid in .env file.');
         }
 
         return {
           secret: jwtSecret,
           signOptions: {
-            expiresIn: jwtExpiresIn, // Now correctly typed as a number
+            // This will now be a number, which satisfies the library's type requirement.
+            expiresIn: jwtExpiresIn,
           },
         };
       },
@@ -49,5 +52,6 @@ import { FacebookStrategy } from './strategies/facebook.strategy';
     GoogleStrategy,
     FacebookStrategy,
   ],
+  exports: [AuthService],
 })
 export class AuthModule {}
