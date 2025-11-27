@@ -22,7 +22,8 @@ import { FirebaseModule } from './firebase/firebase.module';
 import { DevicesModule } from './devices/devices.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ScheduleModule } from '@nestjs/schedule';
-import { RemindersModule } from './reminders/reminders.module'; // <-- 1. IMPORT RemindersModule
+import { RemindersModule } from './reminders/reminders.module';
+import { SearchModule } from './search/search.module'; // <-- 1. IMPORT SearchModule
 
 @Module({
   imports: [
@@ -44,19 +45,20 @@ import { RemindersModule } from './reminders/reminders.module'; // <-- 1. IMPORT
     TypeOrmModule.forRoot(dataSourceOptions),
 
     // Application Modules
-    UsersModule,
     AuthModule,
-    MailModule,
     ContentModule,
-    PurchaseModule,
-    FeedModule,
-    UploadModule,
-    YoutubeModule,
-    SeedModule,
-    FirebaseModule,
     DevicesModule,
+    FeedModule,
+    FirebaseModule,
+    MailModule,
     NotificationsModule,
-    RemindersModule, // <-- 2. ADD RemindersModule
+    PurchaseModule,
+    RemindersModule,
+    SearchModule, // <-- 2. ADD SearchModule
+    SeedModule,
+    UploadModule,
+    UsersModule,
+    YoutubeModule,
   ],
   controllers: [AppController],
   providers: [AppService],

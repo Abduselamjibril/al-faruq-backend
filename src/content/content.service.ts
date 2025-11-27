@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Brackets, In, Repository } from 'typeorm';
 import { Content, ContentType } from './entities/content.entity';
 import { CreateContentDto } from './dto/create-content.dto';
 import { UpdateContentDto } from './dto/update-content.dto';
@@ -73,17 +73,14 @@ export class ContentService {
     return this.contentRepository.save(content);
   }
 
-  // --- THIS METHOD HAS BEEN UPDATED ---
   async remove(id: string): Promise<{ message: string }> {
     const content = await this.contentRepository.findOneBy({ id });
     if (!content) {
       throw new NotFoundException(`Content with ID ${id} not found.`);
     }
     await this.contentRepository.remove(content);
-    // Return a success message object
     return { message: 'Content successfully deleted.' };
   }
-  // --- END OF UPDATE ---
 
   async lockContent(id: string, createPricingDto: CreatePricingDto): Promise<Content> {
     const content = await this.findOneWithHierarchy(id);
@@ -116,4 +113,60 @@ export class ContentService {
     content.isLocked = false;
     return this.contentRepository.save(content);
   }
+
+  // --- [NEW METHOD 1 START] ---
+  /**
+   * Searches for top-level content (Movies, Series, Music Videos).
+   * @param query The user's search term.
+   * @returns A promise that resolves to an array of content items.
+   */
+  async searchTopLevelContent(query: string): Promise<Content[]> {
+    const searchTerm = `%${query.toLowerCase()}%`;
+
+    return this.contentRepository
+      .createQueryBuilder('content')
+      .where('content.type IN (:...types)', {
+        types: [ContentType.MOVIE, ContentType.SERIES, ContentType.MUSIC_VIDEO],
+      })
+      .andWhere(
+        new Brackets((qb) => {
+          qb.where('LOWER(content.title) LIKE :searchTerm', { searchTerm }).orWhere(
+            'LOWER(content.description) LIKE :searchTerm',
+            { searchTerm },
+          );
+        }),
+      )
+      .orderBy('content.createdAt', 'DESC')
+      .take(20) // Limit the number of results for performance
+      .getMany();
+  }
+  // --- [NEW METHOD 1 END] ---
+
+  // --- [NEW METHOD 2 START] ---
+  /**
+   * Searches for episodes based on the episode title or its parent series title.
+   * @param query The user's search term.
+   * @returns A promise that resolves to an array of episode content items.
+   */
+  async searchEpisodes(query: string): Promise<Content[]> {
+    const searchTerm = `%${query.toLowerCase()}%`;
+
+    return this.contentRepository
+      .createQueryBuilder('episode')
+      .leftJoinAndSelect('episode.parent', 'season')
+      .leftJoinAndSelect('season.parent', 'series')
+      .where('episode.type = :type', { type: ContentType.EPISODE })
+      .andWhere(
+        new Brackets((qb) => {
+          qb.where('LOWER(episode.title) LIKE :searchTerm', {
+            searchTerm,
+          }).orWhere('LOWER(series.title) LIKE :searchTerm', { searchTerm });
+        }),
+      )
+      .orderBy('series.title', 'ASC')
+      .addOrderBy('episode.createdAt', 'ASC')
+      .take(20) // Limit the number of results for performance
+      .getMany();
+  }
+  // --- [NEW METHOD 2 END] ---
 }

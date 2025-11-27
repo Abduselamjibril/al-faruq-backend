@@ -11,6 +11,7 @@ import {
   Res,
   HttpCode,
   HttpStatus,
+  Delete, // --- 1. IMPORT Delete DECORATOR ---
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Response } from 'express';
@@ -170,6 +171,20 @@ export class AuthController {
     return this.usersService.findById(req.user.id);
   }
 
+  // --- NEW "DELETE MY ACCOUNT" ENDPOINT FOR USERS ---
+  @Delete('profile')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete the account of the current logged-in user' })
+  @ApiResponse({ status: 200, description: 'User account successfully deleted.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  async deleteProfile(@Request() req) {
+    await this.usersService.remove(req.user.id);
+    return { message: 'User account successfully deleted.' };
+  }
+  // --- END OF NEW ENDPOINT ---
+
   // --- ADMIN-ONLY ENDPOINTS ---
 
   @Get('admin/profile')
@@ -183,13 +198,11 @@ export class AuthController {
     return this.usersService.findById(req.user.id);
   }
 
-  // --- THIS ENDPOINT HAS BEEN UPDATED ---
   @Patch('admin/change-credentials')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(RoleName.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: "Change the current admin's email or password (Admin Only)" })
-  // ADDED ApiBody decorator for a clear example
   @ApiBody({ type: ChangeAdminCredentialsDto })
   @ApiResponse({ status: 200, description: 'Admin credentials updated successfully.' })
   @ApiResponse({ status: 400, description: 'Invalid input data.' })
@@ -201,7 +214,6 @@ export class AuthController {
   ) {
     return this.authService.changeAdminCredentials(req.user.id, changeAdminCredentialsDto);
   }
-  // --- END OF UPDATE ---
 
   @ApiOperation({ summary: 'Access an admin-only protected route' })
   @ApiBearerAuth()

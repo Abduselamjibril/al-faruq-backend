@@ -1,5 +1,3 @@
-// src/youtube/youtube.service.ts
-
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -7,6 +5,19 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import type { Cache } from 'cache-manager';
 import { google, youtube_v3 } from 'googleapis';
 import { PlaylistItemDto, VideoStatus } from './dto/playlist-response.dto';
+
+/**
+ * Defines the structure for a single YouTube search result item.
+ * This should ideally be in its own file, e.g., src/youtube/dto/youtube-search-result.dto.ts
+ */
+export class YouTubeSearchResultDto {
+  videoId: string;
+  title: string;
+  description: string;
+  thumbnailUrl: string;
+  channelTitle: string;
+  publishedAt: string;
+}
 
 @Injectable()
 export class YoutubeService {
@@ -33,6 +44,54 @@ export class YoutubeService {
       version: 'v3',
       auth: apiKey,
     });
+  }
+
+  /**
+   * Performs a general keyword search on YouTube.
+   * Results are cached for 1 hour to improve performance and save API quota.
+   * @param query The user's search term.
+   * @returns A promise that resolves to an array of formatted search results.
+   */
+  async searchYouTube(query: string): Promise<YouTubeSearchResultDto[]> {
+    const cacheKey = `YOUTUBE_SEARCH_${query.toUpperCase()}`;
+    const cachedData = await this.cacheManager.get<YouTubeSearchResultDto[]>(
+      cacheKey,
+    );
+
+    if (cachedData) {
+      this.logger.log(`Serving YouTube search for "${query}" from cache.`);
+      return cachedData;
+    }
+
+    this.logger.log(`Cache empty for "${query}". Fetching from YouTube API.`);
+    try {
+      // --- [FIX START] ---
+      // We create a correctly typed parameters object to satisfy the googleapis library.
+      const params: youtube_v3.Params$Resource$Search$List = {
+        part: ['snippet'],
+        q: query,
+        type: ['video'], // This is the main fix: 'video' must be inside an array.
+        maxResults: 20,
+      };
+
+      const response = await this.youtube.search.list(params);
+      // --- [FIX END] ---
+
+      const items = response.data.items || [];
+      const formattedResults = this._formatSearchResultData(items);
+
+      // Cache the results for 1 hour (3600 seconds)
+      await this.cacheManager.set(cacheKey, formattedResults, 3600);
+
+      return formattedResults;
+    } catch (error) {
+      this.logger.error(
+        `Failed to perform YouTube search for "${query}"`,
+        error.stack,
+      );
+      // We throw an error so the upstream service knows the call failed.
+      throw new Error('Could not perform search on YouTube.');
+    }
   }
 
   /**
@@ -102,7 +161,6 @@ export class YoutubeService {
 
       do {
         const params: youtube_v3.Params$Resource$Playlistitems$List = {
-          // We add 'status' to the 'part' parameter to fetch the video's privacy status
           part: ['snippet', 'status'],
           playlistId: this.playlistId,
           maxResults: 50,
@@ -123,8 +181,6 @@ export class YoutubeService {
 
       const formattedVideos = this._formatVideoData(allVideos);
 
-      // We remove the indefinite cache and let the nightly cron handle updates.
-      // A TTL could be added here as a fallback if desired.
       await this.cacheManager.set(this.CACHE_KEY, formattedVideos);
       this.logger.log(
         `Successfully fetched and cached ${formattedVideos.length} videos.`,
@@ -138,7 +194,41 @@ export class YoutubeService {
   }
 
   /**
-   * A private helper method to transform the raw YouTube API response
+   * A private helper method to transform the raw YouTube API search response
+   * into our custom, clean YouTubeSearchResultDto format.
+   */
+  private _formatSearchResultData(
+    items: youtube_v3.Schema$SearchResult[],
+  ): YouTubeSearchResultDto[] {
+    return items
+      .map((item) => {
+        if (
+          item.id &&
+          item.id.videoId &&
+          item.snippet &&
+          item.snippet.title &&
+          item.snippet.thumbnails
+        ) {
+          return {
+            videoId: item.id.videoId,
+            title: item.snippet.title,
+            description: item.snippet.description || '',
+            thumbnailUrl:
+              item.snippet.thumbnails.high?.url ||
+              item.snippet.thumbnails.medium?.url ||
+              item.snippet.thumbnails.default?.url ||
+              '',
+            channelTitle: item.snippet.channelTitle || '',
+            publishedAt: item.snippet.publishedAt || '',
+          };
+        }
+        return null;
+      })
+      .filter((item): item is YouTubeSearchResultDto => item !== null);
+  }
+
+  /**
+   * A private helper method to transform the raw YouTube API playlist response
    * into our custom, clean PlaylistItemDto format.
    */
   private _formatVideoData(
@@ -146,7 +236,6 @@ export class YoutubeService {
   ): PlaylistItemDto[] {
     return items
       .map((item) => {
-        // We add a check for 'item.status' to ensure the privacy status is present
         if (
           item.snippet &&
           item.snippet.resourceId &&
@@ -165,7 +254,6 @@ export class YoutubeService {
               item.snippet.thumbnails.default?.url ||
               '',
             publishedAt: item.snippet.publishedAt || '',
-            // We extract the privacyStatus and map it to our new 'status' field
             status: item.status.privacyStatus as VideoStatus,
           };
         }

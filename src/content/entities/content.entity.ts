@@ -1,3 +1,5 @@
+// src/content/entities/content.entity.ts
+
 import {
   BaseEntity,
   Column,
@@ -31,19 +33,19 @@ export class Content extends BaseEntity {
   title: string;
 
   @Column({ type: 'text', nullable: true })
-  description: string;
+  description: string | null;
 
   @Column({ nullable: true })
-  thumbnailUrl: string;
+  thumbnailUrl: string | null;
 
   @Column({ nullable: true })
-  videoUrl: string;
+  videoUrl: string | null;
 
   @Column({ nullable: true })
-  trailerUrl: string;
+  trailerUrl: string | null;
 
   @Column({ type: 'integer', nullable: true, comment: 'Duration in seconds' })
-  duration: number;
+  duration: number | null;
 
   @Index() // Index this for quick filtering of content types
   @Column({
@@ -58,13 +60,13 @@ export class Content extends BaseEntity {
 
   @Index() // Crucial index for fetching children of a parent
   @Column({ type: 'uuid', nullable: true })
-  parentId: string;
+  parentId: string | null;
 
   @ManyToOne(() => Content, (content) => content.children, {
     onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'parentId' })
-  parent: Content;
+  parent: Content | null;
 
   @OneToMany(() => Content, (content) => content.parent)
   children: Content[];
@@ -72,7 +74,7 @@ export class Content extends BaseEntity {
   @OneToOne(() => PricingTier, (pricingTier) => pricingTier.content, {
     cascade: true,
   })
-  pricingTier: PricingTier;
+  pricingTier: PricingTier | null;
 
   @OneToMany(() => Purchase, (purchase) => purchase.content)
   purchases: Purchase[];
