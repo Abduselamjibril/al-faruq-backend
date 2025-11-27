@@ -1,5 +1,3 @@
-// src/purchase/purchase.controller.ts
-
 import {
   Controller,
   Post,
@@ -9,21 +7,24 @@ import {
   HttpCode,
   HttpStatus,
   All,
+  createParamDecorator,
+  ExecutionContext,
 } from '@nestjs/common';
 import { PurchaseService } from './purchase.service';
 import { InitiatePurchaseDto } from './dto/initiate-purchase.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { createParamDecorator, ExecutionContext } from '@nestjs/common';
 import {
   ApiBearerAuth,
-  ApiBody, // --- ADDED ---
+  ApiBody,
   ApiExcludeEndpoint,
   ApiOperation,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-// --- ADDED the new response DTO ---
 import { InitiatePurchaseResponseDto } from './dto/initiate-purchase-response.dto';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { RoleName } from '../roles/entities/role.entity';
 
 // Note: To avoid duplication, this should be moved to its own file.
 export const GetUser = createParamDecorator(
@@ -33,17 +34,20 @@ export const GetUser = createParamDecorator(
   },
 );
 
-@ApiTags('Purchase (User)')
+@ApiTags('Purchase (User-Facing)')
 @Controller('purchase')
 export class PurchaseController {
   constructor(private readonly purchaseService: PurchaseService) {}
 
+  @Post('initiate')
+  // --- GUARDS AND ROLES APPLIED TO THIS ENDPOINT ---
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(RoleName.USER)
+  @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Initiate a content purchase and get a payment URL',
+    summary: 'Initiate a content purchase and get a payment URL (User Only)',
   })
-  // --- ADDED ApiBody to show request example ---
   @ApiBody({ type: InitiatePurchaseDto })
-  // --- UPDATED ApiResponse to show response example using our new DTO ---
   @ApiResponse({
     status: 201,
     description: 'Payment successfully initiated. Returns a checkoutUrl.',
@@ -55,29 +59,30 @@ export class PurchaseController {
   })
   @ApiResponse({
     status: 401,
-    description: 'Unauthorized. A valid JWT is required.',
+    description: 'Unauthorized.',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden.',
   })
   @ApiResponse({
     status: 404,
     description: 'Not Found. The specified user or content does not exist.',
   })
-  @ApiBearerAuth()
-  @Post('initiate')
-  @UseGuards(JwtAuthGuard)
   initiatePurchase(
     @GetUser() user: { id: number },
     @Body() initiatePurchaseDto: InitiatePurchaseDto,
-  ): Promise<InitiatePurchaseResponseDto> { // --- UPDATED return type for clarity
+  ): Promise<InitiatePurchaseResponseDto> {
     return this.purchaseService.initiatePurchase(user.id, initiatePurchaseDto);
   }
 
+  // --- WEBHOOK ENDPOINT (MUST REMAIN PUBLIC) ---
   @ApiExcludeEndpoint()
   @All('chapa-webhook')
   @HttpCode(HttpStatus.OK)
   async chapaWebhook(@Body() body: any, @Req() req: any) {
     const chapaResponse = Object.keys(body).length > 0 ? body : req.query;
     console.log('Chapa webhook received:', chapaResponse);
-    // This is a fire-and-forget operation, no need to await it.
     this.purchaseService.verifyAndGrantAccess(chapaResponse);
     return;
   }

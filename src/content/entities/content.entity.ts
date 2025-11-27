@@ -35,13 +35,13 @@ export class Content extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   description: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true }) // --- CHANGED: Explicitly set type to 'varchar'
   thumbnailUrl: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true }) // --- CHANGED: Explicitly set type to 'varchar'
   videoUrl: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true }) // --- CHANGED: Explicitly set type to 'varchar'
   trailerUrl: string | null;
 
   @Column({ type: 'integer', nullable: true, comment: 'Duration in seconds' })

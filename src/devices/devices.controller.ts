@@ -1,5 +1,3 @@
-// src/devices/devices.controller.ts
-
 import {
   Controller,
   Post,
@@ -11,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { DevicesService } from './devices.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { GetUser } from '../auth/decorators/get-user.decorator'; // Assuming you will move GetUser here
+import { GetUser } from '../auth/decorators/get-user.decorator';
 import { User } from '../users/entities/user.entity';
 import { RegisterDeviceDto } from './dto/register-device.dto';
 import {
@@ -20,21 +18,27 @@ import {
   ApiOperation,
   ApiResponse,
 } from '@nestjs/swagger';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { RoleName } from '../roles/entities/role.entity';
 
-@ApiTags('Devices (User)')
+@ApiTags('Devices (User-Facing)')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
 @Controller('devices')
+// --- GUARDS AND ROLES APPLIED AT THE CONTROLLER LEVEL ---
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(RoleName.USER)
 export class DevicesController {
   constructor(private readonly devicesService: DevicesService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Register a device for push notifications' })
+  @ApiOperation({ summary: 'Register a device for push notifications (User Only)' })
   @ApiResponse({
     status: 201,
     description: 'Device successfully registered.',
   })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 403, description: 'Forbidden.' })
   registerDevice(
     @GetUser() user: User,
     @Body() registerDeviceDto: RegisterDeviceDto,
@@ -44,12 +48,13 @@ export class DevicesController {
 
   @Delete()
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Unregister a device from push notifications (on logout)' })
+  @ApiOperation({ summary: 'Unregister a device from push notifications (on logout) (User Only)' })
   @ApiResponse({
     status: 204,
     description: 'Device successfully unregistered.',
   })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 403, description: 'Forbidden.' })
   deleteDevice(
     @GetUser() user: User,
     @Body() registerDeviceDto: RegisterDeviceDto,

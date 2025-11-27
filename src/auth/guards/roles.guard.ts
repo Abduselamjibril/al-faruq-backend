@@ -1,5 +1,3 @@
-// src/auth/guards/roles.guard.ts
-
 import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { RoleName } from '../../roles/entities/role.entity';
@@ -15,11 +13,13 @@ export class RolesGuard implements CanActivate {
       [context.getHandler(), context.getClass()],
     );
 
-    // If a route has no @Roles decorator, we allow access by default
-    // for any authenticated user.
+    // --- THIS IS THE CRITICAL CHANGE ---
+    // If a route is protected by this guard but has no @Roles decorator,
+    // we DENY access by default for security (principle of least privilege).
     if (!requiredRoles) {
-      return true;
+      return false;
     }
+    // --- END OF CHANGE ---
 
     const { user } = context.switchToHttp().getRequest();
 
@@ -30,6 +30,7 @@ export class RolesGuard implements CanActivate {
     }
 
     // Check if the user's role is included in the list of required roles.
+    // This logic remains the same and works perfectly.
     return requiredRoles.some((role) => user.role === role);
   }
 }

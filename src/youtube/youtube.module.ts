@@ -1,15 +1,16 @@
 // src/youtube/youtube.module.ts
 
 import { Module } from '@nestjs/common';
-import { ScheduleModule } from '@nestjs/schedule'; // <-- 1. IMPORT the ScheduleModule
+import { ScheduleModule } from '@nestjs/schedule';
 import { YoutubeController } from './youtube.controller';
 import { YoutubeService } from './youtube.service';
 
 @Module({
   imports: [
-    ScheduleModule.forRoot(), // <-- 2. ADD ScheduleModule.forRoot() to the imports array
+    ScheduleModule.forRoot(),
   ],
   controllers: [YoutubeController],
   providers: [YoutubeService],
+  exports: [YoutubeService], // <-- ADD THIS LINE
 })
 export class YoutubeModule {}

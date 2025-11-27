@@ -11,7 +11,7 @@ import {
   Res,
   HttpCode,
   HttpStatus,
-  Delete, // --- 1. IMPORT Delete DECORATOR ---
+  Delete,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Response } from 'express';
@@ -49,6 +49,8 @@ export class AuthController {
     private readonly configService: ConfigService,
   ) {}
 
+  // --- PUBLIC ENDPOINTS (No Guards) ---
+
   @ApiOperation({ summary: 'Register a new user' })
   @ApiResponse({ status: 201, description: 'User successfully created.' })
   @ApiResponse({ status: 400, description: 'Invalid input data.' })
@@ -77,6 +79,33 @@ export class AuthController {
   async login(@Request() req, @Body() _loginDto: LoginUserDto) {
     return this.authService.login(req.user);
   }
+
+  @ApiOperation({ summary: 'Request a password reset OTP' })
+  @ApiResponse({
+    status: 200,
+    description: 'A confirmation message is always returned.',
+  })
+  @HttpCode(HttpStatus.OK)
+  @Post('forgot-password')
+  async forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
+    await this.authService.requestPasswordReset(forgotPasswordDto.email);
+    return {
+      message:
+        'If an account with that email exists, a password reset OTP has been sent.',
+    };
+  }
+
+  @ApiOperation({ summary: 'Reset password using an OTP' })
+  @ApiResponse({ status: 200, description: 'Password reset successfully.' })
+  @ApiResponse({ status: 400, description: 'Invalid or expired OTP.' })
+  @HttpCode(HttpStatus.OK)
+  @Post('reset-password')
+  async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
+    await this.authService.resetPassword(resetPasswordDto);
+    return { message: 'Password has been reset successfully.' };
+  }
+
+  // --- SSO ENDPOINTS (Specific Guards) ---
 
   @ApiOperation({ summary: 'Initiate Google SSO flow' })
   @ApiResponse({
@@ -118,40 +147,19 @@ export class AuthController {
     res.redirect(`${frontendUrl}/auth/callback?token=${access_token}`);
   }
 
-  @ApiOperation({ summary: 'Request a password reset OTP' })
-  @ApiResponse({
-    status: 200,
-    description: 'A confirmation message is always returned.',
-  })
-  @HttpCode(HttpStatus.OK)
-  @Post('forgot-password')
-  async forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
-    await this.authService.requestPasswordReset(forgotPasswordDto.email);
-    return {
-      message:
-        'If an account with that email exists, a password reset OTP has been sent.',
-    };
-  }
+  // --- USER-ONLY ENDPOINTS ---
 
-  @ApiOperation({ summary: 'Reset password using an OTP' })
-  @ApiResponse({ status: 200, description: 'Password reset successfully.' })
-  @ApiResponse({ status: 400, description: 'Invalid or expired OTP.' })
-  @HttpCode(HttpStatus.OK)
-  @Post('reset-password')
-  async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
-    await this.authService.resetPassword(resetPasswordDto);
-    return { message: 'Password has been reset successfully.' };
-  }
-
-  @ApiOperation({ summary: 'Change password for a logged-in user' })
+  @ApiOperation({ summary: 'Change password for the logged-in user (User Only)' })
   @ApiBearerAuth()
   @ApiResponse({ status: 200, description: 'Password changed successfully.' })
   @ApiResponse({
     status: 401,
     description: 'Unauthorized or incorrect current password.',
   })
+  @ApiResponse({ status: 403, description: 'Forbidden.' })
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard) // <-- ADDED RolesGuard
+  @Roles(RoleName.USER) // <-- ADDED USER Role
   @Patch('change-password')
   async changePassword(
     @Request() req,
@@ -161,29 +169,31 @@ export class AuthController {
     return { message: 'Password changed successfully.' };
   }
 
-  @ApiOperation({ summary: 'Get the profile of the current logged-in user' })
+  @ApiOperation({ summary: 'Get the profile of the current logged-in user (User Only)' })
   @ApiBearerAuth()
   @ApiResponse({ status: 200, description: 'Returns the user profile.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  @UseGuards(JwtAuthGuard)
+  @ApiResponse({ status: 403, description: 'Forbidden.' })
+  @UseGuards(JwtAuthGuard, RolesGuard) // <-- ADDED RolesGuard
+  @Roles(RoleName.USER) // <-- ADDED USER Role
   @Get('profile')
   getProfile(@Request() req) {
     return this.usersService.findById(req.user.id);
   }
 
-  // --- NEW "DELETE MY ACCOUNT" ENDPOINT FOR USERS ---
   @Delete('profile')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard) // <-- ADDED RolesGuard
+  @Roles(RoleName.USER) // <-- ADDED USER Role
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Delete the account of the current logged-in user' })
+  @ApiOperation({ summary: 'Delete the account of the current logged-in user (User Only)' })
   @ApiResponse({ status: 200, description: 'User account successfully deleted.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 403, description: 'Forbidden.' })
   async deleteProfile(@Request() req) {
     await this.usersService.remove(req.user.id);
     return { message: 'User account successfully deleted.' };
   }
-  // --- END OF NEW ENDPOINT ---
 
   // --- ADMIN-ONLY ENDPOINTS ---
 

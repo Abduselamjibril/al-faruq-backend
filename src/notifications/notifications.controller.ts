@@ -23,28 +23,30 @@ import {
   ApiResponse,
 } from '@nestjs/swagger';
 
-// --- UPDATED ApiTags to cover both Admin and User roles ---
-@ApiTags('Notifications (Admin)', 'Notifications (User)')
+@ApiTags('Notifications') // --- 1. CLEANED UP ApiTags ---
 @ApiBearerAuth()
 @Controller('notifications')
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
-  // --- NEW ENDPOINT FOR REGULAR USERS ---
+  // --- USER-ACCESSIBLE ENDPOINT ---
   @Get()
-  @UseGuards(JwtAuthGuard) // Protected by JWT, but NOT RolesGuard
+  // --- 2. APPLIED STRICT GUARDS ---
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  // --- 3. EXPLICITLY DEFINED ROLES ---
+  // Note: We include ADMIN here so they can also use this endpoint.
+  // Remove RoleName.ADMIN if you want it to be strictly for users.
+  @Roles(RoleName.USER, RoleName.ADMIN)
   @ApiOperation({ summary: 'Get notification history for the current user' })
   @ApiResponse({
     status: 200,
     description: 'Returns a list of all broadcast notifications sent.',
   })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 403, description: 'Forbidden.' })
   findAllForUser() {
-    // This endpoint is for users, so it reuses the getHistory logic.
-    // In a more complex app, you might have user-specific notifications.
     return this.notificationsService.getHistory();
   }
-  // --- END OF NEW ENDPOINT ---
 
   // --- ADMIN-ONLY ENDPOINTS ARE BELOW ---
 
