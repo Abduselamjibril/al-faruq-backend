@@ -15,6 +15,7 @@ import {
 } from 'typeorm';
 import { PricingTier } from '../../pricing/entities/pricing-tier.entity';
 import { Purchase } from '../../purchase/entities/purchase.entity';
+import { AudioTrack } from './audio-track.entity'; // --- [NEW] IMPORT ---
 
 export enum ContentType {
   MOVIE = 'MOVIE',
@@ -22,6 +23,7 @@ export enum ContentType {
   SERIES = 'SERIES',
   SEASON = 'SEASON',
   EPISODE = 'EPISODE',
+  QURAN_TAFSIR = 'QURAN_TAFSIR', // --- [NEW] ADDED QURAN_TAFSIR TYPE ---
 }
 
 @Entity()
@@ -35,13 +37,13 @@ export class Content extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   description: string | null;
 
-  @Column({ type: 'varchar', nullable: true }) // --- CHANGED: Explicitly set type to 'varchar'
+  @Column({ type: 'varchar', nullable: true })
   thumbnailUrl: string | null;
 
-  @Column({ type: 'varchar', nullable: true }) // --- CHANGED: Explicitly set type to 'varchar'
+  @Column({ type: 'varchar', nullable: true })
   videoUrl: string | null;
 
-  @Column({ type: 'varchar', nullable: true }) // --- CHANGED: Explicitly set type to 'varchar'
+  @Column({ type: 'varchar', nullable: true })
   trailerUrl: string | null;
 
   @Column({ type: 'integer', nullable: true, comment: 'Duration in seconds' })
@@ -78,6 +80,11 @@ export class Content extends BaseEntity {
 
   @OneToMany(() => Purchase, (purchase) => purchase.content)
   purchases: Purchase[];
+
+  // --- [NEW] RELATIONSHIP TO AUDIO TRACKS ---
+  @OneToMany(() => AudioTrack, (audioTrack) => audioTrack.content)
+  audioTracks: AudioTrack[];
+  // --- [END OF NEW] ---
 
   @CreateDateColumn()
   createdAt: Date;

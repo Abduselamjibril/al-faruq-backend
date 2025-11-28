@@ -41,7 +41,10 @@ export class UploadController {
     status: 201,
     description: 'Video uploaded successfully. Returns the cloud URL.',
   })
-  @ApiResponse({ status: 400, description: 'No file uploaded or invalid file type.' })
+  @ApiResponse({
+    status: 400,
+    description: 'No file uploaded or invalid file type.',
+  })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -82,7 +85,10 @@ export class UploadController {
     status: 201,
     description: 'Thumbnail uploaded successfully. Returns the cloud URL.',
   })
-  @ApiResponse({ status: 400, description: 'No file uploaded or invalid file type.' })
+  @ApiResponse({
+    status: 400,
+    description: 'No file uploaded or invalid file type.',
+  })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -115,4 +121,49 @@ export class UploadController {
       provider_id: result.provider_id,
     };
   }
+
+  // --- [NEW] AUDIO UPLOAD ENDPOINT ---
+  @Post('audio')
+  @ApiOperation({ summary: 'Upload an audio file' })
+  @ApiResponse({
+    status: 201,
+    description: 'Audio uploaded successfully. Returns the cloud URL.',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'No file uploaded or invalid file type.',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        audio: {
+          type: 'string',
+          format: 'binary',
+          description: 'The audio file to upload (e.g., mp3, m4a, ogg). Max 100MB.',
+        },
+      },
+    },
+  })
+  @UseInterceptors(FileInterceptor('audio'))
+  async uploadAudio(
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: 100 * 1024 * 1024 }), // 100MB
+          new FileTypeValidator({ fileType: 'audio/*' }),
+        ],
+      }),
+    )
+    file: Express.Multer.File,
+  ) {
+    const result = await this.uploadService.uploadFile(file, 'audio');
+    return {
+      message: 'Audio uploaded successfully to cloud',
+      url: result.url,
+      provider_id: result.provider_id,
+    };
+  }
+  // --- [END OF NEW] ---
 }

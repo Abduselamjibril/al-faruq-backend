@@ -23,7 +23,9 @@ import { DevicesModule } from './devices/devices.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { RemindersModule } from './reminders/reminders.module';
-import { SearchModule } from './search/search.module'; // <-- 1. IMPORT SearchModule
+import { SearchModule } from './search/search.module';
+import { LanguageModule } from './language/language.module';
+import { ReportsModule } from './reports/reports.module'; // --- [NEW] IMPORT ---
 
 @Module({
   imports: [
@@ -50,11 +52,13 @@ import { SearchModule } from './search/search.module'; // <-- 1. IMPORT SearchMo
     DevicesModule,
     FeedModule,
     FirebaseModule,
+    LanguageModule,
     MailModule,
     NotificationsModule,
     PurchaseModule,
     RemindersModule,
-    SearchModule, // <-- 2. ADD SearchModule
+    ReportsModule, // --- [NEW] ADD THE MODULE HERE ---
+    SearchModule,
     SeedModule,
     UploadModule,
     UsersModule,

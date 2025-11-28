@@ -13,7 +13,7 @@ export interface IUploadAdapter {
   upload(
     file: Express.Multer.File,
     folder: string,
-    type: 'video' | 'thumbnail', // <-- ADDED the 'type' parameter
+    type: 'video' | 'thumbnail' | 'audio', // --- [MODIFIED] ADDED 'audio' TYPE ---
   ): Promise<UploadResult>;
 }
 

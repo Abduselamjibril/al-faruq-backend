@@ -61,18 +61,68 @@ export class FeedService {
     return allTopLevelContent;
   }
 
-  async getContentForUser(contentId: string, userId: number): Promise<Content> {
-    // Step 1: Fetch the main content item first.
-    const content = await this.contentRepository.findOne({
-      where: { id: contentId },
-      relations: ['pricingTier'],
+  async getAllTafsir(): Promise<Content[]> {
+    return this.contentRepository.find({
+      where: {
+        type: ContentType.QURAN_TAFSIR,
+      },
+      order: {
+        createdAt: 'ASC', // Or order by title, etc.
+      },
+      select: ['id', 'title', 'description', 'thumbnailUrl', 'createdAt'], // Select only needed fields for list view
     });
+  }
+
+  // --- [NEW] METHOD TO GET USER'S ACTIVE PURCHASES ---
+  async getMyPurchases(userId: number): Promise<Content[]> {
+    const now = new Date();
+
+    // Find all active purchases for the user and join the related content
+    const userPurchases = await this.purchaseRepository.find({
+      where: {
+        user: { id: userId },
+        expiresAt: MoreThan(now),
+      },
+      relations: ['content'], // Eagerly load the content for each purchase
+      order: {
+        createdAt: 'DESC', // Show the most recent purchases first
+      },
+    });
+
+    // Extract the content from the purchases and prepare it for the response
+    const purchasedContent = userPurchases.map((purchase) => {
+      const content = purchase.content;
+      // For this response, the content is always considered unlocked
+      content.isLocked = false;
+      // We don't need to show the user pricing info for content they already own
+      content.pricingTier = null;
+      return content;
+    });
+
+    return purchasedContent;
+  }
+  // --- [END OF NEW] ---
+
+  async getContentForUser(contentId: string, userId: number): Promise<Content> {
+    const content = await this.contentRepository
+      .createQueryBuilder('content')
+      .leftJoinAndSelect('content.pricingTier', 'pricingTier')
+      .leftJoinAndSelect('content.audioTracks', 'audioTracks')
+      .leftJoinAndSelect('audioTracks.language', 'language')
+      .where('content.id = :id', { id: contentId })
+      .orderBy('audioTracks.createdAt', 'ASC')
+      .getOne();
 
     if (!content) {
       throw new NotFoundException(`Content with ID ${contentId} not found.`);
     }
 
-    // Step 2: If it's a SERIES, manually fetch its children (seasons and episodes).
+    if (content.type === ContentType.QURAN_TAFSIR) {
+      content.isLocked = false;
+      content.pricingTier = null;
+      return content;
+    }
+
     if (content.type === ContentType.SERIES) {
       const seasons = await this.contentRepository.find({
         where: { parentId: content.id },
@@ -88,27 +138,22 @@ export class FeedService {
       content.children = seasons;
     }
 
-    // If the content is not locked globally, return it as is.
     if (!content.isLocked) {
       return content;
     }
 
-    // If the content IS locked, check if this specific user has access.
     const hasAccess = await this.checkUserAccess(contentId, userId);
 
-    // If the user has access, mutate the content object for the response.
     if (hasAccess) {
       content.isLocked = false;
       content.pricingTier = null;
     } else {
-      // If the user does NOT have access, sanitize the content in place.
       if (
         content.type === ContentType.MOVIE ||
         content.type === ContentType.MUSIC_VIDEO
       ) {
         content.videoUrl = null;
       }
-      // For series, loop through and nullify all episode video URLs.
       if (content.children) {
         for (const season of content.children) {
           if (season.children) {
