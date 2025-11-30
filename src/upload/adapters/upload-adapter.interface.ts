@@ -8,12 +8,11 @@ export interface UploadResult {
 }
 
 export interface IUploadAdapter {
-  // --- UPDATED METHOD SIGNATURE ---
   // We now pass the 'type' to the adapter so it can decide which transformations to apply.
   upload(
     file: Express.Multer.File,
     folder: string,
-    type: 'video' | 'thumbnail' | 'audio', // --- [MODIFIED] ADDED 'audio' TYPE ---
+    type: 'video' | 'thumbnail' | 'audio' | 'pdf', // --- [MODIFIED] ADDED 'pdf' TYPE ---
   ): Promise<UploadResult>;
 }
 

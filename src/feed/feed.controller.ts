@@ -8,6 +8,7 @@ import {
   UseGuards,
   createParamDecorator,
   ExecutionContext,
+  Query,
 } from '@nestjs/common';
 import { FeedService } from './feed.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -22,6 +23,8 @@ import { RoleName } from '../roles/entities/role.entity';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import { Content } from '../content/entities/content.entity';
+import { FeedQueryDto } from './dto/feed-query.dto';
+import { PaginationResponseDto } from '../utils/pagination.dto';
 
 // To avoid duplication, this decorator should be in its own file (e.g., src/auth/decorators/get-user.decorator.ts)
 export const GetUser = createParamDecorator(
@@ -56,40 +59,44 @@ export class FeedController {
   @Roles(RoleName.USER)
   @Get()
   @ApiOperation({
-    summary: "Get the main content feed for the user's home screen (User Only)",
+    summary: "Get the paginated and filterable main content feed for the user's home screen (User Only)",
   })
   @ApiResponse({
     status: 200,
-    description:
-      "Returns a personalized list of all top-level content items. 'isLocked' will be false for any content the user has purchased.",
-    type: [Content],
+    description: 'Returns a paginated and personalized list of top-level content items.',
+    type: PaginationResponseDto,
   })
+  @ApiResponse({ status: 400, description: 'Invalid query parameters.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   @ApiResponse({ status: 403, description: 'Forbidden.' })
-  getFeed(@GetUser() user: { id: number }) {
-    return this.feedService.getFeed(user.id);
+  getFeed(
+    @GetUser() user: { id: number },
+    @Query() query: FeedQueryDto,
+  ): Promise<PaginationResponseDto<Content>> {
+    return this.feedService.getFeed(user.id, query);
   }
 
-  // --- [NEW] ENDPOINT FOR USER'S PURCHASES ---
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(RoleName.USER)
   @Get('my-purchases')
   @ApiOperation({
-    summary: "Get all content the user has actively rented/purchased (User Only)",
+    summary: "Get all content the user has actively rented/purchased, with pagination and filtering (User Only)",
   })
   @ApiResponse({
     status: 200,
-    description:
-      'Returns a list of content items for which the user has an active rental.',
-    type: [Content],
+    description: 'Returns a paginated list of content items for which the user has an active rental.',
+    type: PaginationResponseDto,
   })
+  @ApiResponse({ status: 400, description: 'Invalid query parameters.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   @ApiResponse({ status: 403, description: 'Forbidden.' })
-  getMyPurchases(@GetUser() user: { id: number }) {
-    return this.feedService.getMyPurchases(user.id);
+  getMyPurchases(
+    @GetUser() user: { id: number },
+    @Query() query: FeedQueryDto,
+  ): Promise<PaginationResponseDto<Content>> {
+    return this.feedService.getMyPurchases(user.id, query);
   }
-  // --- [END OF NEW] ---
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -98,8 +105,7 @@ export class FeedController {
   @ApiOperation({ summary: 'Get detailed information for a specific content item (User Only)' })
   @ApiResponse({
     status: 200,
-    description:
-      'Returns the full content hierarchy. Video URLs will be null if the user has not purchased the content. For Tafsir, audio tracks are included.',
+    description: 'Returns the full content hierarchy.',
     type: Content,
   })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })

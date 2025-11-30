@@ -17,7 +17,7 @@ export class UploadService {
 
   async uploadFile(
     file: Express.Multer.File,
-    type: 'video' | 'thumbnail' | 'audio', // --- [MODIFIED] ADDED 'audio' TYPE ---
+    type: 'video' | 'thumbnail' | 'audio' | 'pdf', // --- [MODIFIED] ADDED 'pdf' TYPE ---
   ): Promise<UploadResult> {
     // We can define different folders in the cloud based on the type
     let folder: string;
@@ -29,7 +29,11 @@ export class UploadService {
         folder = 'alfaruq/thumbnails';
         break;
       case 'audio':
-        folder = 'alfaruq/audio'; // --- [NEW] DEDICATED FOLDER FOR AUDIO ---
+        folder = 'alfaruq/audio';
+        break;
+      // --- [NEW] DEDICATED FOLDER FOR PDFS ---
+      case 'pdf':
+        folder = 'alfaruq/books';
         break;
       default:
         folder = 'alfaruq/others';

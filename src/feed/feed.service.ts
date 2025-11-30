@@ -2,9 +2,11 @@
 
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThan } from 'typeorm';
+import { Repository, MoreThan, FindManyOptions, Like, In } from 'typeorm'; // --- [FIX] IMPORT 'In' ---
 import { Content, ContentType } from '../content/entities/content.entity';
 import { Purchase } from '../purchase/entities/purchase.entity';
+import { FeedQueryDto } from './dto/feed-query.dto';
+import { PaginationResponseDto } from '../utils/pagination.dto';
 
 @Injectable()
 export class FeedService {
@@ -15,50 +17,129 @@ export class FeedService {
     private readonly purchaseRepository: Repository<Purchase>,
   ) {}
 
-  async getFeed(userId: number): Promise<Content[]> {
-    // Step A: Get a set of all content IDs the user has active purchases for.
-    const now = new Date();
-    const userPurchases = await this.purchaseRepository.find({
-      where: {
-        user: { id: userId },
-        expiresAt: MoreThan(now),
-      },
-      relations: ['content'],
-    });
-    const purchasedContentIds = new Set(
-      userPurchases.map((p) => p.content.id),
-    );
+  async getFeed(
+    userId: number,
+    query: FeedQueryDto,
+  ): Promise<PaginationResponseDto<Content>> {
+    const { page, limit, category, author, genre, year } = query;
+    const take = limit || 10;
+    const skip = ((page || 1) - 1) * take;
 
-    // Step B: Get all top-level content items from the database.
-    const allTopLevelContent = await this.contentRepository.find({
-      where: [
-        { type: ContentType.MOVIE },
-        { type: ContentType.SERIES },
-        { type: ContentType.MUSIC_VIDEO },
-      ],
+    // --- Step A: Build dynamic query options ---
+    const where: FindManyOptions<Content>['where'] = {};
+    const topLevelTypes = [
+      ContentType.MOVIE,
+      ContentType.SERIES,
+      ContentType.MUSIC_VIDEO,
+      ContentType.DAWAH,
+      ContentType.DOCUMENTARY,
+      ContentType.PROPHET_HISTORY,
+      ContentType.BOOK,
+    ];
+
+    // Filter by category if provided, otherwise default to all top-level types
+    where.type = category ? category : In(topLevelTypes);
+
+    // Add book-specific filters only if the category is BOOK
+    if (where.type === ContentType.BOOK) {
+      if (author) where.authorName = Like(`%${author}%`);
+      if (genre) where.genre = Like(`%${genre}%`);
+      if (year) where.publicationYear = year;
+    }
+
+    // --- Step B: Fetch paginated data and total count ---
+    const [results, total] = await this.contentRepository.findAndCount({
+      where,
       relations: ['pricingTier'],
       order: { createdAt: 'DESC' },
+      take,
+      skip,
     });
 
-    // Step C: Iterate over the content and personalize it for the user by mutating it.
-    // We use forEach to modify the array's items in place.
-    allTopLevelContent.forEach((content) => {
-      // If the content is globally locked, we need to check user's access.
-      if (content.isLocked) {
-        // Check if the user's purchased IDs include this content's ID.
-        if (purchasedContentIds.has(content.id)) {
-          // User has access. Mutate the object for this response.
-          content.isLocked = false; // Override the lock status for this response.
-          content.pricingTier = null; // User doesn't need pricing info anymore.
-        } else {
-          // User does not have access. Sanitize the locked content.
-          content.videoUrl = null; // IMPORTANT: Nullify the video URL.
-        }
+    // --- Step C: Personalize the results for the user ---
+    const now = new Date();
+    const userPurchases = await this.purchaseRepository.find({
+      where: { user: { id: userId }, expiresAt: MoreThan(now) },
+      relations: ['content'],
+    });
+    const purchasedContentIds = new Set(userPurchases.map((p) => p.content.id));
+
+    results.forEach((content) => {
+      if (content.isLocked && !purchasedContentIds.has(content.id)) {
+        content.videoUrl = null;
+        content.audioUrl = null;
+        content.pdfUrl = null;
+      } else if (content.isLocked && purchasedContentIds.has(content.id)) {
+        content.isLocked = false;
+        content.pricingTier = null;
       }
     });
 
-    // Return the original array, which now contains the modified Content instances.
-    return allTopLevelContent;
+    // --- Step D: Format and return the paginated response ---
+    const totalPages = Math.ceil(total / take);
+    const meta = {
+      totalItems: total,
+      itemCount: results.length,
+      itemsPerPage: take,
+      totalPages,
+      currentPage: page || 1,
+    };
+
+    return new PaginationResponseDto(results, meta);
+  }
+
+  async getMyPurchases(
+    userId: number,
+    query: FeedQueryDto,
+  ): Promise<PaginationResponseDto<Content>> {
+    const { page, limit, category, author, genre, year } = query;
+    const take = limit || 10;
+    const skip = ((page || 1) - 1) * take;
+
+    // --- Step A: Build dynamic where clause for purchases ---
+    const contentFilters: FindManyOptions<Content>['where'] = {};
+    if (category) contentFilters.type = category;
+    if (category === ContentType.BOOK) {
+      if (author) contentFilters.authorName = Like(`%${author}%`);
+      if (genre) contentFilters.genre = Like(`%${genre}%`);
+      if (year) contentFilters.publicationYear = year;
+    }
+
+    const where: FindManyOptions<Purchase>['where'] = {
+      user: { id: userId },
+      expiresAt: MoreThan(new Date()),
+      content:
+        Object.keys(contentFilters).length > 0 ? contentFilters : undefined,
+    };
+
+    // --- Step B: Fetch paginated purchases and total count ---
+    const [purchases, total] = await this.purchaseRepository.findAndCount({
+      where,
+      relations: ['content'],
+      order: { createdAt: 'DESC' },
+      take,
+      skip,
+    });
+
+    // --- Step C: Prepare the content for the response ---
+    const purchasedContent = purchases.map((purchase) => {
+      const content = purchase.content;
+      content.isLocked = false;
+      content.pricingTier = null;
+      return content;
+    });
+
+    // --- Step D: Format and return the paginated response ---
+    const totalPages = Math.ceil(total / take);
+    const meta = {
+      totalItems: total,
+      itemCount: purchasedContent.length,
+      itemsPerPage: take,
+      totalPages,
+      currentPage: page || 1,
+    };
+
+    return new PaginationResponseDto(purchasedContent, meta);
   }
 
   async getAllTafsir(): Promise<Content[]> {
@@ -67,43 +148,16 @@ export class FeedService {
         type: ContentType.QURAN_TAFSIR,
       },
       order: {
-        createdAt: 'ASC', // Or order by title, etc.
+        createdAt: 'ASC',
       },
-      select: ['id', 'title', 'description', 'thumbnailUrl', 'createdAt'], // Select only needed fields for list view
+      select: ['id', 'title', 'description', 'thumbnailUrl', 'createdAt'],
     });
   }
 
-  // --- [NEW] METHOD TO GET USER'S ACTIVE PURCHASES ---
-  async getMyPurchases(userId: number): Promise<Content[]> {
-    const now = new Date();
-
-    // Find all active purchases for the user and join the related content
-    const userPurchases = await this.purchaseRepository.find({
-      where: {
-        user: { id: userId },
-        expiresAt: MoreThan(now),
-      },
-      relations: ['content'], // Eagerly load the content for each purchase
-      order: {
-        createdAt: 'DESC', // Show the most recent purchases first
-      },
-    });
-
-    // Extract the content from the purchases and prepare it for the response
-    const purchasedContent = userPurchases.map((purchase) => {
-      const content = purchase.content;
-      // For this response, the content is always considered unlocked
-      content.isLocked = false;
-      // We don't need to show the user pricing info for content they already own
-      content.pricingTier = null;
-      return content;
-    });
-
-    return purchasedContent;
-  }
-  // --- [END OF NEW] ---
-
-  async getContentForUser(contentId: string, userId: number): Promise<Content> {
+  async getContentForUser(
+    contentId: string,
+    userId: number,
+  ): Promise<Content> {
     const content = await this.contentRepository
       .createQueryBuilder('content')
       .leftJoinAndSelect('content.pricingTier', 'pricingTier')
@@ -123,19 +177,14 @@ export class FeedService {
       return content;
     }
 
-    if (content.type === ContentType.SERIES) {
-      const seasons = await this.contentRepository.find({
+    if (
+      content.type === ContentType.SERIES ||
+      content.type === ContentType.PROPHET_HISTORY
+    ) {
+      content.children = await this.contentRepository.find({
         where: { parentId: content.id },
         order: { createdAt: 'ASC' },
       });
-
-      for (const season of seasons) {
-        season.children = await this.contentRepository.find({
-          where: { parentId: season.id },
-          order: { createdAt: 'ASC' },
-        });
-      }
-      content.children = seasons;
     }
 
     if (!content.isLocked) {
@@ -148,21 +197,9 @@ export class FeedService {
       content.isLocked = false;
       content.pricingTier = null;
     } else {
-      if (
-        content.type === ContentType.MOVIE ||
-        content.type === ContentType.MUSIC_VIDEO
-      ) {
-        content.videoUrl = null;
-      }
-      if (content.children) {
-        for (const season of content.children) {
-          if (season.children) {
-            for (const episode of season.children) {
-              episode.videoUrl = null;
-            }
-          }
-        }
-      }
+      content.videoUrl = null;
+      content.audioUrl = null;
+      content.pdfUrl = null;
     }
 
     return content;

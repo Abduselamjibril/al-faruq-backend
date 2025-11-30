@@ -50,7 +50,7 @@ export class UploadController {
     schema: {
       type: 'object',
       properties: {
-        video: {
+        file: {
           type: 'string',
           format: 'binary',
           description: 'The video file to upload (e.g., mp4, mkv, mov). Max 5GB.',
@@ -58,10 +58,9 @@ export class UploadController {
       },
     },
   })
-  @UseInterceptors(FileInterceptor('video'))
+  @UseInterceptors(FileInterceptor('file'))
   async uploadVideo(
     @UploadedFile(
-      // Use built-in NestJS pipes for validation instead of multer options for better error handling and Swagger integration
       new ParseFilePipe({
         validators: [
           new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 * 1024 }), // 5GB
@@ -94,7 +93,7 @@ export class UploadController {
     schema: {
       type: 'object',
       properties: {
-        thumbnail: {
+        file: {
           type: 'string',
           format: 'binary',
           description: 'The image file to upload (e.g., jpg, png). Max 5MB.',
@@ -102,7 +101,7 @@ export class UploadController {
       },
     },
   })
-  @UseInterceptors(FileInterceptor('thumbnail'))
+  @UseInterceptors(FileInterceptor('file'))
   async uploadThumbnail(
     @UploadedFile(
       new ParseFilePipe({
@@ -122,7 +121,6 @@ export class UploadController {
     };
   }
 
-  // --- [NEW] AUDIO UPLOAD ENDPOINT ---
   @Post('audio')
   @ApiOperation({ summary: 'Upload an audio file' })
   @ApiResponse({
@@ -138,7 +136,7 @@ export class UploadController {
     schema: {
       type: 'object',
       properties: {
-        audio: {
+        file: {
           type: 'string',
           format: 'binary',
           description: 'The audio file to upload (e.g., mp3, m4a, ogg). Max 100MB.',
@@ -146,7 +144,7 @@ export class UploadController {
       },
     },
   })
-  @UseInterceptors(FileInterceptor('audio'))
+  @UseInterceptors(FileInterceptor('file'))
   async uploadAudio(
     @UploadedFile(
       new ParseFilePipe({
@@ -161,6 +159,50 @@ export class UploadController {
     const result = await this.uploadService.uploadFile(file, 'audio');
     return {
       message: 'Audio uploaded successfully to cloud',
+      url: result.url,
+      provider_id: result.provider_id,
+    };
+  }
+  
+  // --- [NEW] PDF UPLOAD ENDPOINT ---
+  @Post('pdf')
+  @ApiOperation({ summary: 'Upload a PDF file for a book' })
+  @ApiResponse({
+    status: 201,
+    description: 'PDF uploaded successfully. Returns the cloud URL.',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'No file uploaded or invalid file type.',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'The PDF file to upload. Max 50MB.',
+        },
+      },
+    },
+  })
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadPdf(
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: 50 * 1024 * 1024 }), // 50MB
+          new FileTypeValidator({ fileType: 'application/pdf' }),
+        ],
+      }),
+    )
+    file: Express.Multer.File,
+  ) {
+    const result = await this.uploadService.uploadFile(file, 'pdf');
+    return {
+      message: 'PDF uploaded successfully to cloud',
       url: result.url,
       provider_id: result.provider_id,
     };

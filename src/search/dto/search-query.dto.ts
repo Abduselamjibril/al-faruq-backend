@@ -1,17 +1,26 @@
+// src/search/dto/search-query.dto.ts
+
 import { IsEnum, IsNotEmpty, IsString, MinLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
+// --- [REPLACED] The old enum is replaced with a comprehensive one ---
 export enum SearchType {
   ALL = 'all',
   YOUTUBE = 'youtube',
-  MOVIE = 'movie',
-  EPISODE = 'episode',
+  MOVIE = 'MOVIE',
+  MUSIC_VIDEO = 'MUSIC_VIDEO',
+  SERIES = 'SERIES',
+  DAWAH = 'DAWAH',
+  DOCUMENTARY = 'DOCUMENTARY',
+  PROPHET_HISTORY = 'PROPHET_HISTORY',
+  BOOK = 'BOOK',
+  EPISODES = 'episodes', // A special category for all child-level content
 }
 
 export class SearchQueryDto {
   @ApiProperty({
     description: 'The search term provided by the user. Must be at least 2 characters long.',
-    example: 'heist',
+    example: 'abraham',
     minLength: 2,
   })
   @IsString()
@@ -20,15 +29,13 @@ export class SearchQueryDto {
   query: string;
 
   @ApiProperty({
-    description: `The type of content to search for. 
-- \`all\`: Searches across YouTube, Movies/Series, and Episodes.
-- \`youtube\`: Searches only YouTube.
-- \`movie\`: Searches only for local Movies, Series, and Music Videos.
-- \`episode\`: Searches only for local Episodes.`,
+    // --- [MODIFIED] Updated the description to list all new options ---
+    description: `The specific type of content to search for.`,
     enum: SearchType,
     default: SearchType.ALL,
-    example: 'all',
+    example: SearchType.BOOK,
   })
   @IsEnum(SearchType)
+  @IsNotEmpty()
   type: SearchType;
 }

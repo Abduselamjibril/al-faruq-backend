@@ -5,7 +5,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
-  Index, // Import Index
+  Index,
   JoinColumn,
   ManyToOne,
   OneToMany,
@@ -15,7 +15,7 @@ import {
 } from 'typeorm';
 import { PricingTier } from '../../pricing/entities/pricing-tier.entity';
 import { Purchase } from '../../purchase/entities/purchase.entity';
-import { AudioTrack } from './audio-track.entity'; // --- [NEW] IMPORT ---
+import { AudioTrack } from './audio-track.entity';
 
 export enum ContentType {
   MOVIE = 'MOVIE',
@@ -23,7 +23,13 @@ export enum ContentType {
   SERIES = 'SERIES',
   SEASON = 'SEASON',
   EPISODE = 'EPISODE',
-  QURAN_TAFSIR = 'QURAN_TAFSIR', // --- [NEW] ADDED QURAN_TAFSIR TYPE ---
+  QURAN_TAFSIR = 'QURAN_TAFSIR',
+  DAWAH = 'DAWAH',
+  DOCUMENTARY = 'DOCUMENTARY',
+  PROPHET_HISTORY = 'PROPHET_HISTORY',
+  PROPHET_HISTORY_EPISODE = 'PROPHET_HISTORY_EPISODE',
+  // --- [NEW] ADDED BOOK TYPE ---
+  BOOK = 'BOOK',
 }
 
 @Entity()
@@ -44,23 +50,54 @@ export class Content extends BaseEntity {
   videoUrl: string | null;
 
   @Column({ type: 'varchar', nullable: true })
+  audioUrl: string | null;
+  
+  // --- [NEW] ADDED PDFURL FIELD FOR BOOKS ---
+  @Column({ type: 'varchar', nullable: true })
+  pdfUrl: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
   trailerUrl: string | null;
+
+  @Column({ type: 'text', nullable: true, comment: 'Comma-separated tags' })
+  tags: string | null;
 
   @Column({ type: 'integer', nullable: true, comment: 'Duration in seconds' })
   duration: number | null;
+  
+  // --- [NEW] BOOK-SPECIFIC FIELDS START ---
 
-  @Index() // Index this for quick filtering of content types
+  @Index() // Index authorName for faster searching
+  @Column({ type: 'varchar', nullable: true })
+  authorName: string | null;
+  
+  @Column({ type: 'text', nullable: true, comment: 'Longer description about the book' })
+  about: string | null;
+
+  @Index() // Index genre for faster searching/filtering
+  @Column({ type: 'varchar', nullable: true })
+  genre: string | null;
+
+  @Column({ type: 'integer', nullable: true })
+  pageSize: number | null;
+
+  @Column({ type: 'integer', nullable: true })
+  publicationYear: number | null;
+
+  // --- [NEW] BOOK-SPECIFIC FIELDS END ---
+
+  @Index()
   @Column({
     type: 'enum',
     enum: ContentType,
   })
   type: ContentType;
 
-  @Index() // Index this to quickly find all locked/unlocked content
+  @Index()
   @Column({ default: false })
   isLocked: boolean;
 
-  @Index() // Crucial index for fetching children of a parent
+  @Index()
   @Column({ type: 'uuid', nullable: true })
   parentId: string | null;
 
@@ -81,10 +118,8 @@ export class Content extends BaseEntity {
   @OneToMany(() => Purchase, (purchase) => purchase.content)
   purchases: Purchase[];
 
-  // --- [NEW] RELATIONSHIP TO AUDIO TRACKS ---
   @OneToMany(() => AudioTrack, (audioTrack) => audioTrack.content)
   audioTracks: AudioTrack[];
-  // --- [END OF NEW] ---
 
   @CreateDateColumn()
   createdAt: Date;

@@ -25,7 +25,7 @@ export class CloudinaryAdapter implements IUploadAdapter {
   async upload(
     file: Express.Multer.File,
     folder: string,
-    type: 'video' | 'thumbnail' | 'audio', // --- [MODIFIED] ADDED 'audio' TYPE ---
+    type: 'video' | 'thumbnail' | 'audio' | 'pdf',
   ): Promise<UploadResult> {
     if (!file) {
       throw new InternalServerErrorException(
@@ -49,7 +49,7 @@ export class CloudinaryAdapter implements IUploadAdapter {
           provider_id: result.public_id,
         };
       } else {
-        // For thumbnails and audio, the original secure_url is correct.
+        // For thumbnails, audio, and PDFs the original secure_url is correct.
         return {
           url: result.secure_url,
           provider_id: result.public_id,
@@ -66,14 +66,16 @@ export class CloudinaryAdapter implements IUploadAdapter {
   private uploadStream(
     file: Express.Multer.File,
     folder: string,
-    type: 'video' | 'thumbnail' | 'audio', // --- [MODIFIED] ADDED 'audio' TYPE ---
+    type: 'video' | 'thumbnail' | 'audio' | 'pdf',
   ): Promise<UploadApiResponse> {
     return new Promise((resolve, reject) => {
-      // --- [MODIFIED] LOGIC FOR RESOURCE TYPE ---
-      let resourceType: 'video' | 'image' = 'image';
+      // --- [MODIFIED] LOGIC TO HANDLE PDF RESOURCE TYPE ---
+      let resourceType: 'video' | 'image' | 'raw' = 'image';
       if (type === 'video' || type === 'audio') {
-        // Cloudinary treats audio files as a 'video' resource type
         resourceType = 'video';
+      } else if (type === 'pdf') {
+        // Cloudinary treats PDFs and other documents as 'raw' files
+        resourceType = 'raw';
       }
 
       const options: any = {

@@ -11,7 +11,8 @@ import {
 } from 'typeorm';
 import { Purchase } from '../../purchase/entities/purchase.entity';
 import { Role } from '../../roles/entities/role.entity';
-import { Device } from '../../devices/entities/device.entity'; // <-- 1. IMPORT Device entity
+import { Device } from '../../devices/entities/device.entity';
+import { UserNotificationStatus } from '../../notifications/entities/user-notification-status.entity';
 
 export enum AuthProvider {
   LOCAL = 'LOCAL',
@@ -30,11 +31,11 @@ export class User {
   @Column({ type: 'varchar', nullable: true })
   lastName: string | null;
 
-  @Column({ type: 'varchar', unique: true, nullable: true }) // <-- ADDED nullable: true
-  phoneNumber: string | null; // <-- ADDED | null
+  @Column({ type: 'varchar', unique: true, nullable: true })
+  phoneNumber: string | null;
 
-  @Column({ type: 'varchar', unique: true }) // <-- REMOVED nullable: true
-  email: string; // <-- REMOVED | null
+  @Column({ type: 'varchar', unique: true })
+  email: string;
 
   @Column({ type: 'varchar', nullable: true })
   @Exclude()
@@ -70,8 +71,14 @@ export class User {
 
   @OneToMany(() => Purchase, (purchase) => purchase.user)
   purchases: Purchase[];
-  
-  // --- NEW DEVICE RELATIONSHIP ADDED BELOW ---
-  @OneToMany(() => Device, (device) => device.user) // <-- 2. DEFINE the one-to-many relationship
+
+  @OneToMany(() => Device, (device) => device.user)
   devices: Device[];
+
+  // --- NEW NOTIFICATION STATUS RELATIONSHIP ADDED BELOW ---
+  @OneToMany(
+    () => UserNotificationStatus,
+    (status) => status.user,
+  )
+  notificationStatuses: UserNotificationStatus[];
 }

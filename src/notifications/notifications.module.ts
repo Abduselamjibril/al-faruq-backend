@@ -5,14 +5,15 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { NotificationsService } from './notifications.service';
 import { Notification } from './entities/notification.entity';
 import { DevicesModule } from '../devices/devices.module';
-import { NotificationsController } from './notifications.controller'; // <-- 1. Import the controller
+import { NotificationsController } from './notifications.controller';
+import { UserNotificationStatus } from './entities/user-notification-status.entity'; // <-- 1. Import the new entity
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Notification]),
+    TypeOrmModule.forFeature([Notification, UserNotificationStatus]), // <-- 2. Add the entity here
     DevicesModule,
   ],
-  controllers: [NotificationsController], // <-- 2. Add the controller to the module
+  controllers: [NotificationsController],
   providers: [NotificationsService],
   exports: [NotificationsService],
 })

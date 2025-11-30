@@ -25,9 +25,9 @@ export class ContentService {
     private readonly contentRepository: Repository<Content>,
     @InjectRepository(PricingTier)
     private readonly pricingRepository: Repository<PricingTier>,
-    @InjectRepository(AudioTrack) // --- [NEW] INJECT REPOSITORY ---
+    @InjectRepository(AudioTrack)
     private readonly audioTrackRepository: Repository<AudioTrack>,
-    @InjectRepository(Language) // --- [NEW] INJECT REPOSITORY ---
+    @InjectRepository(Language)
     private readonly languageRepository: Repository<Language>,
   ) {}
 
@@ -51,6 +51,10 @@ export class ContentService {
         { type: ContentType.MOVIE },
         { type: ContentType.SERIES },
         { type: ContentType.MUSIC_VIDEO },
+        { type: ContentType.DAWAH },
+        { type: ContentType.DOCUMENTARY },
+        { type: ContentType.PROPHET_HISTORY },
+        { type: ContentType.BOOK },
       ],
       order: { createdAt: 'DESC' },
     });
@@ -59,16 +63,16 @@ export class ContentService {
   async findOneWithHierarchy(id: string): Promise<Content> {
     const content = await this.contentRepository
       .createQueryBuilder('content')
-      .leftJoinAndSelect('content.children', 'seasons')
-      .leftJoinAndSelect('seasons.children', 'episodes')
+      .leftJoinAndSelect('content.children', 'seasonsOrEpisodes')
+      .leftJoinAndSelect('seasonsOrEpisodes.children', 'episodes')
       .leftJoinAndSelect('content.pricingTier', 'pricingTier')
-      .leftJoinAndSelect('content.audioTracks', 'audioTracks') // --- [NEW] JOIN AUDIO TRACKS ---
-      .leftJoinAndSelect('audioTracks.language', 'language') // --- [NEW] JOIN LANGUAGE INFO ---
+      .leftJoinAndSelect('content.audioTracks', 'audioTracks')
+      .leftJoinAndSelect('audioTracks.language', 'language')
       .where('content.id = :id', { id })
       .orderBy({
-        'seasons.createdAt': 'ASC',
+        'seasonsOrEpisodes.createdAt': 'ASC',
         'episodes.createdAt': 'ASC',
-        'audioTracks.createdAt': 'ASC', // --- [NEW] ORDER AUDIO TRACKS ---
+        'audioTracks.createdAt': 'ASC',
       })
       .getOne();
 
@@ -104,11 +108,18 @@ export class ContentService {
     const content = await this.findOneWithHierarchy(id);
 
     if (
-      content.type !== ContentType.MOVIE &&
-      content.type !== ContentType.SERIES &&
-      content.type !== ContentType.MUSIC_VIDEO
+      ![
+        ContentType.MOVIE,
+        ContentType.SERIES,
+        ContentType.MUSIC_VIDEO,
+        ContentType.DAWAH,
+        ContentType.DOCUMENTARY,
+        ContentType.BOOK,
+      ].includes(content.type)
     ) {
-      throw new Error('Locking is only permitted for MOVIES, SERIES, or MUSIC VIDEOS.');
+      throw new BadRequestException(
+        'Locking is only permitted for MOVIES, SERIES, MUSIC VIDEOS, DAWAH, DOCUMENTARIES, or BOOKS.',
+      );
     }
 
     let pricingTier = content.pricingTier;
@@ -136,8 +147,6 @@ export class ContentService {
     return this.contentRepository.save(content);
   }
 
-  // --- [NEW] AUDIO TRACK MANAGEMENT METHODS ---
-
   async addAudioTrack(
     contentId: string,
     createAudioTrackDto: CreateAudioTrackDto,
@@ -148,7 +157,7 @@ export class ContentService {
     }
     if (content.type !== ContentType.QURAN_TAFSIR) {
       throw new BadRequestException(
-        'Audio tracks can only be added to content of type QURAN_TAFSIR.',
+        'This endpoint is for adding language-specific audio tracks to QURAN_TAFSIR content only.',
       );
     }
 
@@ -207,45 +216,72 @@ export class ContentService {
     return { message: 'Audio track successfully deleted.' };
   }
 
-  // --- [END OF NEW] ---
-
-  async searchTopLevelContent(query: string): Promise<Content[]> {
+  // --- [MODIFIED] Method now accepts an optional 'type' parameter ---
+  async searchTopLevelContent(
+    query: string,
+    type?: ContentType,
+  ): Promise<Content[]> {
     const searchTerm = `%${query.toLowerCase()}%`;
+    const qb = this.contentRepository.createQueryBuilder('content');
 
-    return this.contentRepository
-      .createQueryBuilder('content')
-      .where('content.type IN (:...types)', {
-        types: [ContentType.MOVIE, ContentType.SERIES, ContentType.MUSIC_VIDEO],
-      })
-      .andWhere(
-        new Brackets((qb) => {
-          qb.where('LOWER(content.title) LIKE :searchTerm', { searchTerm }).orWhere(
-            'LOWER(content.description) LIKE :searchTerm',
-            { searchTerm },
-          );
-        }),
-      )
+    // --- [MODIFIED] Dynamically add a WHERE clause for the specific type ---
+    if (type) {
+      qb.where('content.type = :type', { type });
+    } else {
+      // If no type is provided, search across all top-level types
+      qb.where('content.type IN (:...types)', {
+        types: [
+          ContentType.MOVIE,
+          ContentType.SERIES,
+          ContentType.MUSIC_VIDEO,
+          ContentType.DAWAH,
+          ContentType.DOCUMENTARY,
+          ContentType.PROPHET_HISTORY,
+          ContentType.BOOK,
+        ],
+      });
+    }
+
+    qb.andWhere(
+      new Brackets((subQb) => {
+        subQb
+          .where('LOWER(content.title) LIKE :searchTerm', { searchTerm })
+          .orWhere('LOWER(content.description) LIKE :searchTerm', {
+            searchTerm,
+          })
+          .orWhere('LOWER(content.tags) LIKE :searchTerm', { searchTerm })
+          .orWhere('LOWER(content.authorName) LIKE :searchTerm', {
+            searchTerm,
+          })
+          .orWhere('LOWER(content.genre) LIKE :searchTerm', { searchTerm });
+      }),
+    )
       .orderBy('content.createdAt', 'DESC')
-      .take(20)
-      .getMany();
+      .take(20);
+
+    return qb.getMany();
   }
 
+  // --- [MODIFIED] This method is now simpler as it only handles one case ---
   async searchEpisodes(query: string): Promise<Content[]> {
     const searchTerm = `%${query.toLowerCase()}%`;
 
     return this.contentRepository
       .createQueryBuilder('episode')
-      .leftJoinAndSelect('episode.parent', 'season')
-      .leftJoinAndSelect('season.parent', 'series')
-      .where('episode.type = :type', { type: ContentType.EPISODE })
+      .leftJoinAndSelect('episode.parent', 'parentContent')
+      .where('episode.type IN (:...types)', {
+        types: [ContentType.EPISODE, ContentType.PROPHET_HISTORY_EPISODE],
+      })
       .andWhere(
         new Brackets((qb) => {
           qb.where('LOWER(episode.title) LIKE :searchTerm', {
             searchTerm,
-          }).orWhere('LOWER(series.title) LIKE :searchTerm', { searchTerm });
+          }).orWhere('LOWER(parentContent.title) LIKE :searchTerm', {
+            searchTerm,
+          });
         }),
       )
-      .orderBy('series.title', 'ASC')
+      .orderBy('parentContent.title', 'ASC')
       .addOrderBy('episode.createdAt', 'ASC')
       .take(20)
       .getMany();

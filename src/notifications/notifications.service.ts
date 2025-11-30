@@ -6,6 +6,12 @@ import { Repository } from 'typeorm';
 import { Notification } from './entities/notification.entity';
 import { DevicesService } from '../devices/devices.service';
 import { FirebaseService } from '../firebase/firebase.service';
+import { UserNotificationStatus } from './entities/user-notification-status.entity';
+import { PaginationQueryDto } from '../utils/pagination-query.dto';
+import {
+  PaginationMetaDto,
+  PaginationResponseDto,
+} from '../utils/pagination.dto';
 
 @Injectable()
 export class NotificationsService {
@@ -14,9 +20,115 @@ export class NotificationsService {
   constructor(
     @InjectRepository(Notification)
     private readonly notificationRepository: Repository<Notification>,
+    @InjectRepository(UserNotificationStatus)
+    private readonly userNotificationStatusRepository: Repository<UserNotificationStatus>,
     private readonly devicesService: DevicesService,
     private readonly firebaseService: FirebaseService,
   ) {}
+
+  // ================================================================= //
+  //                      USER-SPECIFIC METHODS                      //
+  // ================================================================= //
+
+  async getNotificationsForUser(
+    userId: number,
+    paginationQuery: PaginationQueryDto,
+  ): Promise<PaginationResponseDto<any>> {
+    // --- THE FIX IS HERE: Provide default values to satisfy TypeScript ---
+    const { page = 1, limit = 10 } = paginationQuery;
+    const skip = (page - 1) * limit;
+
+    const queryBuilder = this.notificationRepository
+      .createQueryBuilder('notification')
+      .leftJoinAndSelect(
+        'notification.userStatuses',
+        'status',
+        'status.userId = :userId',
+        { userId },
+      )
+      .where('status.isCleared IS NULL OR status.isCleared = :isCleared', {
+        isCleared: false,
+      })
+      .orderBy('notification.sentAt', 'DESC')
+      .skip(skip)
+      .take(limit);
+
+    const [paginatedNotifications, totalItems] =
+      await queryBuilder.getManyAndCount();
+
+    const data = paginatedNotifications.map((notification) => {
+      const status = notification.userStatuses[0]; // Will be undefined or the user's specific status
+      return {
+        id: notification.id,
+        title: notification.title,
+        message: notification.message,
+        sentAt: notification.sentAt,
+        isRead: status ? status.isRead : false, // Default to unread if no status exists
+      };
+    });
+
+    const meta = new PaginationMetaDto();
+    meta.totalItems = totalItems;
+    meta.itemCount = data.length;
+    meta.itemsPerPage = limit;
+    meta.totalPages = Math.ceil(totalItems / limit);
+    meta.currentPage = page;
+
+    return new PaginationResponseDto(data, meta);
+  }
+
+  async markNotificationAsRead(
+    userId: number,
+    notificationId: number,
+  ): Promise<void> {
+    await this.userNotificationStatusRepository.save({
+      userId,
+      notificationId,
+      isRead: true,
+    });
+    this.logger.log(
+      `Marked notification ${notificationId} as read for user ${userId}`,
+    );
+  }
+
+  async clearNotificationForUser(
+    userId: number,
+    notificationId: number,
+  ): Promise<void> {
+    await this.userNotificationStatusRepository.save({
+      userId,
+      notificationId,
+      isRead: true,
+      isCleared: true,
+    });
+    this.logger.log(
+      `Cleared notification ${notificationId} for user ${userId}`,
+    );
+  }
+
+  async clearAllNotificationsForUser(userId: number): Promise<void> {
+    const allNotifications = await this.notificationRepository.find({
+      select: ['id'],
+    });
+
+    if (allNotifications.length === 0) {
+      return;
+    }
+
+    const statusesToUpsert = allNotifications.map((notification) => ({
+      userId,
+      notificationId: notification.id,
+      isRead: true,
+      isCleared: true,
+    }));
+
+    await this.userNotificationStatusRepository.save(statusesToUpsert);
+    this.logger.log(`Cleared all notifications for user ${userId}`);
+  }
+
+  // ================================================================= //
+  //                        ADMIN-ONLY METHODS                       //
+  // ================================================================= //
 
   async sendBroadcastNotification(
     title: string,
@@ -72,7 +184,6 @@ export class NotificationsService {
     });
   }
 
-  // --- NEW DELETE METHOD ---
   async deleteNotification(id: number): Promise<void> {
     const result = await this.notificationRepository.delete(id);
 
