@@ -1,3 +1,5 @@
+// src/news/news.module.ts
+
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { News } from './entities/news.entity';
@@ -8,5 +10,6 @@ import { NewsService } from './news.service';
   imports: [TypeOrmModule.forFeature([News])],
   controllers: [NewsController],
   providers: [NewsService],
+  exports: [NewsService], // --- [NEW] EXPORT THE SERVICE ---
 })
 export class NewsModule {}

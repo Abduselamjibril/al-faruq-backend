@@ -7,6 +7,7 @@ import { ApiProperty } from '@nestjs/swagger';
 export enum SearchType {
   ALL = 'all',
   YOUTUBE = 'youtube',
+  NEWS = 'news', // --- [NEW] ADDED NEWS SEARCH TYPE ---
   MOVIE = 'MOVIE',
   MUSIC_VIDEO = 'MUSIC_VIDEO',
   SERIES = 'SERIES',

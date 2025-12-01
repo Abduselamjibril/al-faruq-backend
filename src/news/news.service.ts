@@ -2,7 +2,7 @@
 
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindManyOptions, ILike, Repository } from 'typeorm';
+import { Brackets, FindManyOptions, ILike, Repository } from 'typeorm';
 import { PaginationResponseDto } from '../utils/pagination.dto';
 import { CreateNewsDto } from './dto/create-news.dto';
 import { NewsQueryDto } from './dto/news-query.dto';
@@ -16,7 +16,7 @@ export class NewsService {
     private readonly newsRepository: Repository<News>,
   ) {}
 
-  // --- User-Facing Method ---
+  // --- User-Facing Methods ---
 
   async findAll(query: NewsQueryDto): Promise<PaginationResponseDto<News>> {
     const { page, limit, category } = query;
@@ -25,13 +25,12 @@ export class NewsService {
 
     const where: FindManyOptions<News>['where'] = {};
     if (category) {
-      // Use ILike for case-insensitive search
       where.category = ILike(`%${category}%`);
     }
 
     const [results, total] = await this.newsRepository.findAndCount({
       where,
-      order: { createdAt: 'DESC' }, // Sort by latest
+      order: { createdAt: 'DESC' },
       take,
       skip,
     });
@@ -46,6 +45,27 @@ export class NewsService {
     };
 
     return new PaginationResponseDto(results, meta);
+  }
+
+  // --- [NEW] Search Method ---
+  async search(query: string): Promise<News[]> {
+    const searchTerm = `%${query.toLowerCase()}%`;
+
+    return this.newsRepository
+      .createQueryBuilder('news')
+      .where(
+        new Brackets((qb) => {
+          qb.where('LOWER(news.title) LIKE :searchTerm', { searchTerm })
+            .orWhere('LOWER(news.description) LIKE :searchTerm', {
+              searchTerm,
+            })
+            .orWhere('LOWER(news.category) LIKE :searchTerm', { searchTerm })
+            .orWhere('LOWER(news.author) LIKE :searchTerm', { searchTerm });
+        }),
+      )
+      .orderBy('news.createdAt', 'DESC')
+      .take(20)
+      .getMany();
   }
 
   // --- Admin-Facing Methods ---

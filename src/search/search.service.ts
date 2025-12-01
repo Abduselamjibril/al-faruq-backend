@@ -6,11 +6,14 @@ import { YoutubeService } from '../youtube/youtube.service';
 import { ContentService } from '../content/content.service';
 import { YouTubeSearchResultDto } from '../youtube/youtube.service';
 import { Content, ContentType } from '../content/entities/content.entity';
+import { NewsService } from '../news/news.service'; // --- [NEW] IMPORT NEWS SERVICE ---
+import { News } from '../news/entities/news.entity'; // --- [NEW] IMPORT NEWS ENTITY ---
 
-// Define the structure of the final search response.
+// --- [MODIFIED] Update the response structure to include news ---
 export interface SearchResult {
   youtube: YouTubeSearchResultDto[];
-  content: Content[]; // A single array for all content types
+  content: Content[];
+  news: News[];
 }
 
 @Injectable()
@@ -20,6 +23,7 @@ export class SearchService {
   constructor(
     private readonly youtubeService: YoutubeService,
     private readonly contentService: ContentService,
+    private readonly newsService: NewsService, // --- [NEW] INJECT NEWS SERVICE ---
   ) {}
 
   async performSearch(
@@ -28,7 +32,6 @@ export class SearchService {
   ): Promise<SearchResult> {
     this.logger.log(`Performing search for query="${query}" with type="${type}"`);
 
-    // Define which search types are considered "top-level" content
     const topLevelTypes = [
       SearchType.MOVIE,
       SearchType.MUSIC_VIDEO,
@@ -43,24 +46,33 @@ export class SearchService {
     const results: SearchResult = {
       youtube: [],
       content: [],
+      news: [],
     };
 
     try {
       if (type === SearchType.ALL) {
-        const [youtubeResults, topLevelResults, episodeResults] =
-          await Promise.all([
-            this.youtubeService.searchYouTube(query),
-            this.contentService.searchTopLevelContent(query),
-            this.contentService.searchEpisodes(query),
-          ]);
+        const [
+          youtubeResults,
+          topLevelResults,
+          episodeResults,
+          newsResults, // --- [NEW] Add news to the 'ALL' search ---
+        ] = await Promise.all([
+          this.youtubeService.searchYouTube(query),
+          this.contentService.searchTopLevelContent(query),
+          this.contentService.searchEpisodes(query),
+          this.newsService.search(query), // --- [NEW] Call the news search method ---
+        ]);
         results.youtube = youtubeResults;
         results.content = [...topLevelResults, ...episodeResults];
+        results.news = newsResults;
       } else if (type === SearchType.YOUTUBE) {
         results.youtube = await this.youtubeService.searchYouTube(query);
+      } else if (type === SearchType.NEWS) {
+        // --- [NEW] Handle the specific NEWS search type ---
+        results.news = await this.newsService.search(query);
       } else if (type === SearchType.EPISODES) {
         results.content = await this.contentService.searchEpisodes(query);
       } else if (topLevelTypes.includes(type)) {
-        // --- [FIX] Applied the explicit 'as unknown as' cast to satisfy TypeScript ---
         results.content = await this.contentService.searchTopLevelContent(
           query,
           type as unknown as ContentType,
@@ -72,7 +84,7 @@ export class SearchService {
         error.stack,
       );
       // Return a clean structure even on failure
-      return { youtube: [], content: [] };
+      return { youtube: [], content: [], news: [] };
     }
 
     return results;
