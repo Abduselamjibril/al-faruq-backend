@@ -5,14 +5,16 @@ import { SearchController } from './search.controller';
 import { SearchService } from './search.service';
 import { YoutubeModule } from '../youtube/youtube.module';
 import { ContentModule } from '../content/content.module';
-import { NewsModule } from '../news/news.module'; // --- [NEW] IMPORT NEWS MODULE ---
+import { NewsModule } from '../news/news.module';
+import { QuranModule } from '../quran/quran.module'; // --- [NEW] IMPORT QURAN MODULE ---
 
 @Module({
   imports: [
     // Import the modules that contain the services we need to use.
     YoutubeModule,
     ContentModule,
-    NewsModule, // --- [NEW] ADD NEWS MODULE HERE ---
+    NewsModule,
+    QuranModule, // --- [NEW] ADD QURAN MODULE HERE ---
   ],
   controllers: [SearchController],
   providers: [SearchService],

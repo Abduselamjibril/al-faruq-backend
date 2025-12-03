@@ -15,7 +15,6 @@ import {
 } from 'typeorm';
 import { PricingTier } from '../../pricing/entities/pricing-tier.entity';
 import { Purchase } from '../../purchase/entities/purchase.entity';
-import { AudioTrack } from './audio-track.entity';
 
 export enum ContentType {
   MOVIE = 'MOVIE',
@@ -23,12 +22,11 @@ export enum ContentType {
   SERIES = 'SERIES',
   SEASON = 'SEASON',
   EPISODE = 'EPISODE',
-  QURAN_TAFSIR = 'QURAN_TAFSIR',
+  // --- [REMOVED] The old 'QURAN_TAFSIR' type is now fully deprecated. ---
   DAWAH = 'DAWAH',
   DOCUMENTARY = 'DOCUMENTARY',
   PROPHET_HISTORY = 'PROPHET_HISTORY',
   PROPHET_HISTORY_EPISODE = 'PROPHET_HISTORY_EPISODE',
-  // --- [NEW] ADDED BOOK TYPE ---
   BOOK = 'BOOK',
 }
 
@@ -51,8 +49,7 @@ export class Content extends BaseEntity {
 
   @Column({ type: 'varchar', nullable: true })
   audioUrl: string | null;
-  
-  // --- [NEW] ADDED PDFURL FIELD FOR BOOKS ---
+
   @Column({ type: 'varchar', nullable: true })
   pdfUrl: string | null;
 
@@ -64,17 +61,15 @@ export class Content extends BaseEntity {
 
   @Column({ type: 'integer', nullable: true, comment: 'Duration in seconds' })
   duration: number | null;
-  
-  // --- [NEW] BOOK-SPECIFIC FIELDS START ---
 
-  @Index() // Index authorName for faster searching
+  @Index()
   @Column({ type: 'varchar', nullable: true })
   authorName: string | null;
-  
+
   @Column({ type: 'text', nullable: true, comment: 'Longer description about the book' })
   about: string | null;
 
-  @Index() // Index genre for faster searching/filtering
+  @Index()
   @Column({ type: 'varchar', nullable: true })
   genre: string | null;
 
@@ -83,8 +78,6 @@ export class Content extends BaseEntity {
 
   @Column({ type: 'integer', nullable: true })
   publicationYear: number | null;
-
-  // --- [NEW] BOOK-SPECIFIC FIELDS END ---
 
   @Index()
   @Column({
@@ -117,9 +110,6 @@ export class Content extends BaseEntity {
 
   @OneToMany(() => Purchase, (purchase) => purchase.content)
   purchases: Purchase[];
-
-  @OneToMany(() => AudioTrack, (audioTrack) => audioTrack.content)
-  audioTracks: AudioTrack[];
 
   @CreateDateColumn()
   createdAt: Date;

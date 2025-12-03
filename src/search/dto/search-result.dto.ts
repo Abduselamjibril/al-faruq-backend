@@ -1,5 +1,10 @@
+// src/search/dto/search-result.dto.ts
+
 import { ApiProperty } from '@nestjs/swagger';
 import { Content } from '../../content/entities/content.entity';
+import { News } from '../../news/entities/news.entity';
+import { Reciter } from '../../quran/entities/reciter.entity';
+import { Surah } from '../../quran/entities/surah.entity';
 
 /**
  * An example DTO representing a single YouTube search result for documentation.
@@ -8,13 +13,19 @@ class YoutubeResultExampleDto {
   @ApiProperty({ example: 'dQw4w9WgXcQ' })
   videoId: string;
 
-  @ApiProperty({ example: 'Rick Astley - Never Gonna Give You Up (Official Music Video)' })
+  @ApiProperty({
+    example: 'Rick Astley - Never Gonna Give You Up (Official Music Video)',
+  })
   title: string;
 
-  @ApiProperty({ example: 'The official video for “Never Gonna Give You Up” by Rick Astley...' })
+  @ApiProperty({
+    example: 'The official video for “Never Gonna Give You Up” by Rick Astley...',
+  })
   description: string;
 
-  @ApiProperty({ example: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg' })
+  @ApiProperty({
+    example: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
+  })
   thumbnailUrl: string;
 
   @ApiProperty({ example: 'RickAstleyVEVO' })
@@ -22,6 +33,21 @@ class YoutubeResultExampleDto {
 
   @ApiProperty({ example: '2009-10-25T06:57:33Z' })
   publishedAt: string;
+}
+
+// --- [NEW] A DTO to structure the Quran search results ---
+class QuranSearchResultDto {
+  @ApiProperty({
+    description: 'A list of matching Surahs.',
+    type: [Surah],
+  })
+  surahs: Surah[];
+
+  @ApiProperty({
+    description: 'A list of matching Reciters.',
+    type: [Reciter],
+  })
+  reciters: Reciter[];
 }
 
 /**
@@ -34,15 +60,24 @@ export class SearchResultDto {
   })
   youtube: YoutubeResultExampleDto[];
 
+  // --- [MODIFIED] Consolidated 'movies' and 'episodes' into a single 'content' array ---
   @ApiProperty({
-    description: 'A list of matching top-level content (Movies, Series, Music Videos) from the local database.',
+    description:
+      'A list of matching content from the local database (e.g., Movies, Series, Episodes).',
     type: [Content],
   })
-  movies: Content[];
+  content: Content[];
 
   @ApiProperty({
-    description: 'A list of matching episodes from the local database.',
-    type: [Content],
+    description: 'A list of matching news articles from the local database.',
+    type: [News],
   })
-  episodes: Content[];
+  news: News[];
+
+  // --- [NEW] Added the quran property to hold Quran-related search results ---
+  @ApiProperty({
+    description: 'A collection of matching Surahs and Reciters.',
+    type: QuranSearchResultDto,
+  })
+  quran: QuranSearchResultDto;
 }

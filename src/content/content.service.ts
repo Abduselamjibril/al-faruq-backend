@@ -2,21 +2,18 @@
 
 import {
   BadRequestException,
-  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, In, Repository } from 'typeorm';
+import { Brackets, Repository } from 'typeorm';
 import { Content, ContentType } from './entities/content.entity';
 import { CreateContentDto } from './dto/create-content.dto';
 import { UpdateContentDto } from './dto/update-content.dto';
 import { CreatePricingDto } from './dto/create-pricing.dto';
 import { PricingTier } from '../pricing/entities/pricing-tier.entity';
-import { AudioTrack } from './entities/audio-track.entity';
 import { Language } from './entities/language.entity';
-import { CreateAudioTrackDto } from './dto/create-audio-track.dto';
-import { UpdateAudioTrackDto } from './dto/update-audio-track.dto';
+// --- [REMOVED] All imports related to the old AudioTrack system. ---
 
 @Injectable()
 export class ContentService {
@@ -25,8 +22,7 @@ export class ContentService {
     private readonly contentRepository: Repository<Content>,
     @InjectRepository(PricingTier)
     private readonly pricingRepository: Repository<PricingTier>,
-    @InjectRepository(AudioTrack)
-    private readonly audioTrackRepository: Repository<AudioTrack>,
+    // --- [REMOVED] 'AudioTrackRepository' is no longer injected. ---
     @InjectRepository(Language)
     private readonly languageRepository: Repository<Language>,
   ) {}
@@ -61,18 +57,16 @@ export class ContentService {
   }
 
   async findOneWithHierarchy(id: string): Promise<Content> {
+    // --- [REMOVED] The joins to the old 'audioTracks' table. ---
     const content = await this.contentRepository
       .createQueryBuilder('content')
       .leftJoinAndSelect('content.children', 'seasonsOrEpisodes')
       .leftJoinAndSelect('seasonsOrEpisodes.children', 'episodes')
       .leftJoinAndSelect('content.pricingTier', 'pricingTier')
-      .leftJoinAndSelect('content.audioTracks', 'audioTracks')
-      .leftJoinAndSelect('audioTracks.language', 'language')
       .where('content.id = :id', { id })
       .orderBy({
         'seasonsOrEpisodes.createdAt': 'ASC',
         'episodes.createdAt': 'ASC',
-        'audioTracks.createdAt': 'ASC',
       })
       .getOne();
 
@@ -147,76 +141,8 @@ export class ContentService {
     return this.contentRepository.save(content);
   }
 
-  async addAudioTrack(
-    contentId: string,
-    createAudioTrackDto: CreateAudioTrackDto,
-  ): Promise<AudioTrack> {
-    const content = await this.contentRepository.findOneBy({ id: contentId });
-    if (!content) {
-      throw new NotFoundException(`Content with ID ${contentId} not found.`);
-    }
-    if (content.type !== ContentType.QURAN_TAFSIR) {
-      throw new BadRequestException(
-        'This endpoint is for adding language-specific audio tracks to QURAN_TAFSIR content only.',
-      );
-    }
+  // --- [REMOVED] The 'addAudioTrack', 'updateAudioTrack', and 'removeAudioTrack' methods are deleted. ---
 
-    const language = await this.languageRepository.findOneBy({
-      id: createAudioTrackDto.languageId,
-    });
-    if (!language) {
-      throw new NotFoundException(
-        `Language with ID ${createAudioTrackDto.languageId} not found.`,
-      );
-    }
-
-    const existingTrack = await this.audioTrackRepository.findOne({
-      where: {
-        contentId,
-        languageId: createAudioTrackDto.languageId,
-      },
-    });
-
-    if (existingTrack) {
-      throw new ConflictException(
-        `An audio track for language '${language.name}' already exists for this content.`,
-      );
-    }
-
-    const newTrack = this.audioTrackRepository.create({
-      ...createAudioTrackDto,
-      contentId: contentId,
-    });
-
-    return this.audioTrackRepository.save(newTrack);
-  }
-
-  async updateAudioTrack(
-    trackId: string,
-    updateAudioTrackDto: UpdateAudioTrackDto,
-  ): Promise<AudioTrack> {
-    const track = await this.audioTrackRepository.preload({
-      id: trackId,
-      ...updateAudioTrackDto,
-    });
-
-    if (!track) {
-      throw new NotFoundException(`Audio track with ID ${trackId} not found.`);
-    }
-
-    return this.audioTrackRepository.save(track);
-  }
-
-  async removeAudioTrack(trackId: string): Promise<{ message: string }> {
-    const track = await this.audioTrackRepository.findOneBy({ id: trackId });
-    if (!track) {
-      throw new NotFoundException(`Audio track with ID ${trackId} not found.`);
-    }
-    await this.audioTrackRepository.remove(track);
-    return { message: 'Audio track successfully deleted.' };
-  }
-
-  // --- [MODIFIED] Method now accepts an optional 'type' parameter ---
   async searchTopLevelContent(
     query: string,
     type?: ContentType,
@@ -224,11 +150,9 @@ export class ContentService {
     const searchTerm = `%${query.toLowerCase()}%`;
     const qb = this.contentRepository.createQueryBuilder('content');
 
-    // --- [MODIFIED] Dynamically add a WHERE clause for the specific type ---
     if (type) {
       qb.where('content.type = :type', { type });
     } else {
-      // If no type is provided, search across all top-level types
       qb.where('content.type IN (:...types)', {
         types: [
           ContentType.MOVIE,
@@ -262,7 +186,6 @@ export class ContentService {
     return qb.getMany();
   }
 
-  // --- [MODIFIED] This method is now simpler as it only handles one case ---
   async searchEpisodes(query: string): Promise<Content[]> {
     const searchTerm = `%${query.toLowerCase()}%`;
 

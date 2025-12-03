@@ -17,6 +17,18 @@ export enum VideoStatus {
   UNLISTED = 'unlisted',
 }
 
+/**
+ * Defines the possible YouTube channel names for filtering.
+ * This will be used by Swagger to generate a dropdown menu.
+ * The values MUST EXACTLY match the channel titles from the YouTube API.
+ */
+export enum ChannelName {
+  QURAN = 'AL-FARUK QURAN / አል-ፋሩቅ ቁርአን',
+  MARIFAH = 'አል-ፋሩቅ አል-ማዕሪፋ / Al-FARUK AI-MARIFAH',
+  FILMS = 'Al-Faruk Films',
+  PRODUCTION = 'Al Faruk Multimedia Production',
+}
+
 export class PlaylistItemDto {
   /**
    * The unique YouTube video ID.
@@ -44,7 +56,7 @@ export class PlaylistItemDto {
 
   /**
    * The date and time when the video was published, in ISO 8-601 format.
-   * Example: "2009-10-25T06:57:33Z"
+   * Example: "2009-10-25TT06:57:33Z"
    */
   publishedAt: string;
 
@@ -54,4 +66,11 @@ export class PlaylistItemDto {
    * Example: "public"
    */
   status: VideoStatus;
+
+  /**
+   * The title of the YouTube channel that published the video.
+   * This is a new field to help the client filter content by channel.
+   * Example: "Al-faruk Quran"
+   */
+  channelTitle: string;
 }

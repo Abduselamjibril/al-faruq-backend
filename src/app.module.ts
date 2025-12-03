@@ -26,7 +26,8 @@ import { RemindersModule } from './reminders/reminders.module';
 import { SearchModule } from './search/search.module';
 import { LanguageModule } from './language/language.module';
 import { ReportsModule } from './reports/reports.module';
-import { NewsModule } from './news/news.module'; // --- [NEW] IMPORT NEWS MODULE ---
+import { NewsModule } from './news/news.module';
+import { QuranModule } from './quran/quran.module'; // --- [NEW] IMPORT QURAN MODULE ---
 
 @Module({
   imports: [
@@ -55,9 +56,10 @@ import { NewsModule } from './news/news.module'; // --- [NEW] IMPORT NEWS MODULE
     FirebaseModule,
     LanguageModule,
     MailModule,
-    NewsModule, // --- [NEW] ADD THE NEWS MODULE HERE ---
+    NewsModule,
     NotificationsModule,
     PurchaseModule,
+    QuranModule, // --- [NEW] ADD THE QURAN MODULE HERE ---
     RemindersModule,
     ReportsModule,
     SearchModule,

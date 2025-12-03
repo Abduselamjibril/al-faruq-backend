@@ -21,7 +21,6 @@ import {
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { RoleName } from '../roles/entities/role.entity';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { Public } from '../auth/decorators/public.decorator';
 import { Content } from '../content/entities/content.entity';
 import { FeedQueryDto } from './dto/feed-query.dto';
 import { PaginationResponseDto } from '../utils/pagination.dto';
@@ -39,21 +38,8 @@ export const GetUser = createParamDecorator(
 export class FeedController {
   constructor(private readonly feedService: FeedService) {}
 
-  @Public()
-  @Get('tafsir')
-  @ApiOperation({
-    summary: 'Get a list of all available Quran Tafsir content (Public)',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Returns a list of all Tafsir content items.',
-    type: [Content],
-  })
-  getAllTafsir() {
-    return this.feedService.getAllTafsir();
-  }
+  // --- [REMOVED] The old @Public @Get('tafsir') endpoint is deleted. ---
 
-  // All endpoints below this require authentication
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(RoleName.USER)

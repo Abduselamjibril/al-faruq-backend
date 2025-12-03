@@ -9,7 +9,8 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { AudioTrack } from './audio-track.entity';
+// --- [REMOVED] The 'AudioTrack' import is no longer needed. ---
+// Note: We are keeping the Language entity itself as it is used by the new Quran system.
 
 @Entity()
 export class Language extends BaseEntity {
@@ -22,8 +23,7 @@ export class Language extends BaseEntity {
   @Column({ unique: true, length: 10 })
   code: string; // e.g., "en", "am"
 
-  @OneToMany(() => AudioTrack, (audioTrack) => audioTrack.language)
-  audioTracks: AudioTrack[];
+  // --- [REMOVED] The 'audioTracks' relationship is no longer needed. ---
 
   @CreateDateColumn()
   createdAt: Date;

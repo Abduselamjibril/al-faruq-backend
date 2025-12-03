@@ -9,7 +9,11 @@ import {
   Query,
 } from '@nestjs/common';
 import { YoutubeService } from './youtube.service';
-import { PlaylistItemDto, VideoStatus } from './dto/playlist-response.dto';
+import {
+  PlaylistItemDto,
+  VideoStatus,
+  ChannelName, // This import is essential
+} from './dto/playlist-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import {
   ApiTags,
@@ -22,7 +26,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RoleName } from '../roles/entities/role.entity';
 
-@ApiTags('YouTube') // --- 1. CLEANED UP ApiTags ---
+@ApiTags('YouTube')
 @ApiBearerAuth()
 @Controller('youtube')
 export class YoutubeController {
@@ -31,16 +35,23 @@ export class YoutubeController {
   constructor(private readonly youtubeService: YoutubeService) {}
 
   @Get('playlist')
-  // --- 2. APPLIED STRICT GUARDS ---
   @UseGuards(JwtAuthGuard, RolesGuard)
-  // --- 3. EXPLICITLY DEFINED ROLES ---
   @Roles(RoleName.USER, RoleName.ADMIN)
   @ApiOperation({ summary: 'Get the cached YouTube playlist' })
   @ApiQuery({
     name: 'status',
     required: false,
     enum: VideoStatus,
-    description: 'Filter videos by their privacy status (public, private, or unlisted).',
+    description:
+      'Filter videos by their privacy status (public, private, or unlisted).',
+  })
+  // This is the part that creates the dropdown
+  @ApiQuery({
+    name: 'channel',
+    required: false,
+    enum: ChannelName, // It MUST use the enum here
+    description:
+      'Filter videos by a specific channel title. If not provided, all videos are returned.',
   })
   @ApiResponse({
     status: 200,
@@ -51,11 +62,14 @@ export class YoutubeController {
   @ApiResponse({ status: 403, description: 'Forbidden.' })
   async getPlaylist(
     @Query('status') status?: VideoStatus,
+    @Query('channel') channel?: ChannelName,
   ): Promise<PlaylistItemDto[]> {
     this.logger.log(
-      `Received request for YouTube playlist. Status filter: ${status || 'none'}`,
+      `Received request for YouTube playlist. Status filter: ${
+        status || 'none'
+      }, Channel filter: ${channel || 'none'}`,
     );
-    return this.youtubeService.getPlaylistVideos(status);
+    return this.youtubeService.getPlaylistVideos(status, channel);
   }
 
   @Post('playlist/refresh')
@@ -63,7 +77,7 @@ export class YoutubeController {
   @Roles(RoleName.ADMIN)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Force refresh the YouTube playlist cache (Admin Only)', // --- 4. UPDATED SUMMARY ---
+    summary: 'Force refresh the YouTube playlist cache (Admin Only)',
   })
   @ApiResponse({
     status: 200,

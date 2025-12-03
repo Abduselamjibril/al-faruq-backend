@@ -24,21 +24,24 @@ export class YoutubeService {
   private readonly logger = new Logger(YoutubeService.name);
   private readonly youtube: youtube_v3.Youtube;
   private readonly CACHE_KEY = 'YOUTUBE_PLAYLIST_DATA';
-  private readonly playlistId: string; // Store playlistId for reuse
+  private readonly playlistIds: string[]; // Store multiple playlist IDs
 
   constructor(
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
     private configService: ConfigService,
   ) {
     const apiKey = this.configService.get<string>('YOUTUBE_API_KEY');
-    const playlistId = this.configService.get<string>('YOUTUBE_PLAYLIST_ID');
+    // Read the comma-separated list of playlist IDs
+    const playlistIdsString =
+      this.configService.get<string>('YOUTUBE_PLAYLIST_IDS');
 
-    if (!apiKey || !playlistId) {
+    if (!apiKey || !playlistIdsString) {
       throw new Error(
-        'YOUTUBE_API_KEY and YOUTUBE_PLAYLIST_ID must be configured in .env file.',
+        'YOUTUBE_API_KEY and YOUTUBE_PLAYLIST_IDS must be configured in .env file.',
       );
     }
-    this.playlistId = playlistId;
+    // Split the string into an array of IDs
+    this.playlistIds = playlistIdsString.split(',');
 
     this.youtube = google.youtube({
       version: 'v3',
@@ -111,32 +114,46 @@ export class YoutubeService {
   /**
    * The main public method to get playlist videos.
    * Checks the cache first, then fetches from the API if the cache is empty.
-   * Filters the videos based on the optional 'status' parameter.
+   * Filters the videos based on optional 'status' and 'channel' parameters.
    */
   async getPlaylistVideos(
     status?: VideoStatus,
+    channel?: string,
   ): Promise<PlaylistItemDto[]> {
     const cachedData = await this.cacheManager.get<PlaylistItemDto[]>(
       this.CACHE_KEY,
     );
-    let videos: PlaylistItemDto[];
+    let allVideos: PlaylistItemDto[];
 
     if (cachedData) {
       this.logger.log('Serving playlist from cache.');
-      videos = cachedData;
+      allVideos = cachedData;
     } else {
       this.logger.log('Cache empty. Fetching fresh data to populate cache.');
-      videos = await this._fetchAndCachePlaylist();
+      allVideos = await this._fetchAndCachePlaylist();
     }
 
-    // If a status filter is provided by the client, apply it here
+    // Start with the full list of videos
+    let filteredVideos = allVideos;
+
+    // If a status filter is provided, apply it first
     if (status) {
       this.logger.log(`Filtering playlist for videos with status: ${status}`);
-      return videos.filter((video) => video.status === status);
+      filteredVideos = filteredVideos.filter(
+        (video) => video.status === status,
+      );
     }
 
-    // If no filter is provided, return all videos
-    return videos;
+    // If a channel filter is provided, apply it to the (potentially already filtered) list
+    if (channel) {
+      this.logger.log(`Filtering playlist for videos from channel: ${channel}`);
+      filteredVideos = filteredVideos.filter(
+        (video) => video.channelTitle === channel,
+      );
+    }
+
+    // Return the final list after all filters have been applied
+    return filteredVideos;
   }
 
   /**
@@ -154,42 +171,47 @@ export class YoutubeService {
    * The core private method that performs the API call to YouTube and caches the result.
    */
   private async _fetchAndCachePlaylist(): Promise<PlaylistItemDto[]> {
-    this.logger.log('Fetching playlist from YouTube API...');
+    this.logger.log('Fetching playlists from YouTube API...');
     try {
-      let nextPageToken: string | null | undefined;
       const allVideos: youtube_v3.Schema$PlaylistItem[] = [];
 
-      do {
-        const params: youtube_v3.Params$Resource$Playlistitems$List = {
-          part: ['snippet', 'status'],
-          playlistId: this.playlistId,
-          maxResults: 50,
-        };
+      // Iterate over each playlist ID to fetch its videos
+      for (const playlistId of this.playlistIds) {
+        let nextPageToken: string | null | undefined;
+        this.logger.log(`Fetching videos for playlist ID: ${playlistId}`);
 
-        if (nextPageToken) {
-          params.pageToken = nextPageToken;
-        }
+        do {
+          const params: youtube_v3.Params$Resource$Playlistitems$List = {
+            part: ['snippet', 'status'],
+            playlistId: playlistId,
+            maxResults: 50,
+          };
 
-        const response = await this.youtube.playlistItems.list(params);
+          if (nextPageToken) {
+            params.pageToken = nextPageToken;
+          }
 
-        if (response.data.items) {
-          allVideos.push(...response.data.items);
-        }
+          const response = await this.youtube.playlistItems.list(params);
 
-        nextPageToken = response.data.nextPageToken;
-      } while (nextPageToken);
+          if (response.data.items) {
+            allVideos.push(...response.data.items);
+          }
+
+          nextPageToken = response.data.nextPageToken;
+        } while (nextPageToken);
+      }
 
       const formattedVideos = this._formatVideoData(allVideos);
 
       await this.cacheManager.set(this.CACHE_KEY, formattedVideos);
       this.logger.log(
-        `Successfully fetched and cached ${formattedVideos.length} videos.`,
+        `Successfully fetched and cached ${formattedVideos.length} videos from ${this.playlistIds.length} channels.`,
       );
 
       return formattedVideos;
     } catch (error) {
-      this.logger.error('Failed to fetch YouTube playlist', error.stack);
-      throw new Error('Could not retrieve playlist from YouTube.');
+      this.logger.error('Failed to fetch YouTube playlists', error.stack);
+      throw new Error('Could not retrieve playlists from YouTube.');
     }
   }
 
@@ -242,7 +264,8 @@ export class YoutubeService {
           item.snippet.resourceId.videoId &&
           item.snippet.title &&
           item.snippet.thumbnails &&
-          item.status
+          item.status &&
+          item.snippet.videoOwnerChannelTitle // Ensure channel title exists
         ) {
           return {
             videoId: item.snippet.resourceId.videoId,
@@ -255,6 +278,8 @@ export class YoutubeService {
               '',
             publishedAt: item.snippet.publishedAt || '',
             status: item.status.privacyStatus as VideoStatus,
+            // Add the channel title to our DTO
+            channelTitle: item.snippet.videoOwnerChannelTitle,
           };
         }
         return null;

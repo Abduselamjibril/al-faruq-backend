@@ -29,9 +29,7 @@ import {
   ApiBody,
 } from '@nestjs/swagger';
 import { Content } from './entities/content.entity';
-import { CreateAudioTrackDto } from './dto/create-audio-track.dto';
-import { AudioTrack } from './entities/audio-track.entity';
-import { UpdateAudioTrackDto } from './dto/update-audio-track.dto';
+// --- [REMOVED] Imports for old AudioTrack DTOs and entities. ---
 
 @ApiTags('Content Management (Admin)')
 @ApiBearerAuth()
@@ -41,7 +39,7 @@ import { UpdateAudioTrackDto } from './dto/update-audio-track.dto';
 export class ContentController {
   constructor(private readonly contentService: ContentService) {}
 
-  @ApiOperation({ summary: 'Create a new content item (movie, series, tafsir, etc.)' })
+  @ApiOperation({ summary: 'Create a new content item (movie, series, book, etc.)' })
   @ApiBody({ type: CreateContentDto })
   @ApiResponse({ status: 201, description: 'Content successfully created.', type: Content })
   @ApiResponse({ status: 400, description: 'Invalid input data.' })
@@ -51,10 +49,10 @@ export class ContentController {
     return this.contentService.create(createContentDto);
   }
 
-  @ApiOperation({ summary: 'Get all top-level content items (excluding Tafsir)' })
+  @ApiOperation({ summary: 'Get all top-level content items' })
   @ApiResponse({
     status: 200,
-    description: 'Returns a list of movies, series, and music videos.',
+    description: 'Returns a list of all top-level content.',
     type: [Content],
   })
   @Get()
@@ -65,7 +63,7 @@ export class ContentController {
   @ApiOperation({ summary: 'Get a single content item with its full hierarchy' })
   @ApiResponse({
     status: 200,
-    description: 'Returns the content item with its children (seasons/episodes/audio tracks).',
+    description: 'Returns the content item with its children (e.g., seasons/episodes).',
     type: Content,
   })
   @ApiResponse({ status: 404, description: 'Content with the specified ID not found.' })
@@ -95,64 +93,7 @@ export class ContentController {
     return this.contentService.remove(id);
   }
 
-  // --- [NEW] AUDIO TRACK MANAGEMENT ENDPOINTS ---
-
-  @ApiOperation({
-    summary: 'Add an audio track to a Quran Tafsir content item',
-  })
-  @ApiBody({ type: CreateAudioTrackDto })
-  @ApiResponse({
-    status: 201,
-    description: 'Audio track successfully added.',
-    type: AudioTrack,
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'Content is not a QURAN_TAFSIR type.',
-  })
-  @ApiResponse({ status: 404, description: 'Content or Language not found.' })
-  @ApiResponse({ status: 409, description: 'An audio track for this language already exists.' })
-  @Post(':id/audio-tracks')
-  addAudioTrack(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() createAudioTrackDto: CreateAudioTrackDto,
-  ) {
-    return this.contentService.addAudioTrack(id, createAudioTrackDto);
-  }
-
-  @ApiOperation({ summary: 'Update an audio track' })
-  @ApiBody({ type: UpdateAudioTrackDto, required: false })
-  @ApiResponse({
-    status: 200,
-    description: 'Audio track successfully updated.',
-    type: AudioTrack,
-  })
-  @ApiResponse({ status: 404, description: 'Audio track not found.' })
-  @Patch(':contentId/audio-tracks/:trackId')
-  updateAudioTrack(
-    @Param('contentId', ParseUUIDPipe) contentId: string, // Included for route consistency, but not used in service
-    @Param('trackId', ParseUUIDPipe) trackId: string,
-    @Body() updateAudioTrackDto: UpdateAudioTrackDto,
-  ) {
-    return this.contentService.updateAudioTrack(trackId, updateAudioTrackDto);
-  }
-
-  @ApiOperation({ summary: 'Delete an audio track' })
-  @ApiResponse({
-    status: 200,
-    description: 'Audio track successfully deleted.',
-  })
-  @ApiResponse({ status: 404, description: 'Audio track not found.' })
-  @Delete(':contentId/audio-tracks/:trackId')
-  @HttpCode(HttpStatus.OK)
-  removeAudioTrack(
-    @Param('contentId', ParseUUIDPipe) contentId: string,
-    @Param('trackId', ParseUUIDPipe) trackId: string,
-  ) {
-    return this.contentService.removeAudioTrack(trackId);
-  }
-
-  // --- END OF NEW ---
+  // --- [REMOVED] All endpoints related to old AudioTrack management are deleted. ---
 
   @ApiOperation({ summary: 'Lock a content item and set its pricing' })
   @ApiBody({ type: CreatePricingDto })
