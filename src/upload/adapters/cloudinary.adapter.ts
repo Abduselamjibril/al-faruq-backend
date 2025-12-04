@@ -1,4 +1,4 @@
-// src/upload/adapters/cloudinary.adapter.ts
+// src/upload/adapters/cloudinary.adapter.ts (Final Corrected Version)
 
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -49,14 +49,20 @@ export class CloudinaryAdapter implements IUploadAdapter {
           provider_id: result.public_id,
         };
       } else {
-        // For thumbnails, audio, and PDFs the original secure_url is correct.
+        // --- [CORRECTED LOGIC] ---
+        // We no longer manipulate the URL. The `secure_url` returned by Cloudinary
+        // will now be correct because of the new upload options.
         return {
           url: result.secure_url,
           provider_id: result.public_id,
         };
+        // --- [END OF CORRECTION] ---
       }
     } catch (error) {
-      console.error('Cloudinary upload failed:', error);
+      console.error(
+        'Cloudinary upload failed. Full error object:',
+        JSON.stringify(error, null, 2),
+      );
       throw new InternalServerErrorException(
         'Failed to upload file to Cloudinary.',
       );
@@ -69,12 +75,10 @@ export class CloudinaryAdapter implements IUploadAdapter {
     type: 'video' | 'thumbnail' | 'audio' | 'pdf',
   ): Promise<UploadApiResponse> {
     return new Promise((resolve, reject) => {
-      // --- [MODIFIED] LOGIC TO HANDLE PDF RESOURCE TYPE ---
       let resourceType: 'video' | 'image' | 'raw' = 'image';
       if (type === 'video' || type === 'audio') {
         resourceType = 'video';
       } else if (type === 'pdf') {
-        // Cloudinary treats PDFs and other documents as 'raw' files
         resourceType = 'raw';
       }
 
@@ -83,13 +87,21 @@ export class CloudinaryAdapter implements IUploadAdapter {
         resource_type: resourceType,
       };
 
-      // Apply HLS transcoding only for actual video files
+      // --- [FINAL MODIFICATION] ---
+      // This is the definitive fix. We instruct Cloudinary to use the original
+      // filename and add random characters to make it unique. This preserves
+      // the .pdf extension in the public_id and the final URL.
+      if (type === 'pdf') {
+        options.use_filename = true;
+        options.unique_filename = true;
+      }
+      // --- [END OF FINAL MODIFICATION] ---
+
       if (type === 'video') {
         options.eager = [
           { streaming_profile: 'hd', format: 'm3u8' },
         ];
       }
-      // --- [END OF MODIFICATION] ---
 
       const uploadStream = cloudinary.uploader.upload_stream(
         options,
