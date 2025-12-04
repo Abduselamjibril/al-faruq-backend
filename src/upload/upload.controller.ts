@@ -1,5 +1,3 @@
-// src/upload/upload.controller.ts
-
 import {
   Controller,
   Post,
@@ -163,7 +161,7 @@ export class UploadController {
       provider_id: result.provider_id,
     };
   }
-  
+
   // --- [NEW] PDF UPLOAD ENDPOINT ---
   @Post('pdf')
   @ApiOperation({ summary: 'Upload a PDF file for a book' })
@@ -200,6 +198,10 @@ export class UploadController {
     )
     file: Express.Multer.File,
   ) {
+    // --- [MODIFICATION] ADDED LOGGING ---
+    console.log(`[Controller] Received new file to upload: ${file.originalname}, Size: ${file.size} bytes`);
+    // --- [END OF MODIFICATION] ---
+
     const result = await this.uploadService.uploadFile(file, 'pdf');
     return {
       message: 'PDF uploaded successfully to cloud',
