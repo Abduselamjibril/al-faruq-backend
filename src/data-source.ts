@@ -26,7 +26,7 @@ export const dataSourceOptions: DataSourceOptions = {
   // FIX: This now points to the compiled JavaScript migration files in the `dist` folder.
   migrations: [join(__dirname, '..', '/*-*.js')],
 
-  synchronize: true,
+  synchronize: false,
 };
 
 // ADD THIS: Create and export the DataSource instance.
