@@ -1,6 +1,4 @@
-// src/users/entities/user.entity.ts
-
-import { Exclude } from 'class-transformer';
+import { Exclude, Expose } from 'class-transformer'; // 🟢 ADDED Expose
 import {
   Column,
   Entity,
@@ -40,6 +38,12 @@ export class User {
   @Column({ type: 'varchar', nullable: true })
   @Exclude()
   password: string | null;
+
+  // 🟢 NEW VIRTUAL PROPERTY
+  @Expose()
+  get hasPassword(): boolean {
+    return !!this.password;
+  }
 
   @Column({ default: false })
   agreedToTerms: boolean;
