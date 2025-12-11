@@ -17,20 +17,29 @@ export class UsersService {
 
   async findByEmail(email: string): Promise<User | undefined> {
     return (
-      (await this.usersRepository.findOne({ where: { email: ILike(email) } })) ??
-      undefined
+      (await this.usersRepository.findOne({
+        where: { email: ILike(email) },
+        relations: ['role'], // <--- ADDED THIS to load role data
+      })) ?? undefined
     );
   }
 
   async findByPhoneNumber(phoneNumber: string): Promise<User | undefined> {
     return (
-      (await this.usersRepository.findOne({ where: { phoneNumber } })) ??
-      undefined
+      (await this.usersRepository.findOne({
+        where: { phoneNumber },
+        relations: ['role'], // <--- ADDED THIS to load role data
+      })) ?? undefined
     );
   }
 
   async findById(id: number): Promise<User | undefined> {
-    return (await this.usersRepository.findOne({ where: { id } })) ?? undefined;
+    return (
+      (await this.usersRepository.findOne({
+        where: { id },
+        relations: ['role'], // <--- ADDED THIS to load role data
+      })) ?? undefined
+    );
   }
 
   async findByProviderId(
@@ -46,8 +55,10 @@ export class UsersService {
       return undefined;
     }
     return (
-      (await this.usersRepository.findOne({ where: whereCondition })) ??
-      undefined
+      (await this.usersRepository.findOne({
+        where: whereCondition,
+        relations: ['role'], // <--- ADDED THIS to load role data
+      })) ?? undefined
     );
   }
 
@@ -73,6 +84,7 @@ export class UsersService {
       order: {
         id: 'ASC',
       },
+      relations: ['role'], // Good practice to include role in list
     });
   }
 
@@ -96,6 +108,7 @@ export class UsersService {
       order: {
         id: 'ASC',
       },
+      relations: ['role'], // Include role in search results too
     });
   }
 }
