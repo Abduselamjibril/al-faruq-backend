@@ -39,6 +39,7 @@ import {
 import { LoginUserDto } from './dto/login-user.dto';
 import { ChangeAdminCredentialsDto } from './dto/change-admin-credentials.dto';
 import { GoogleMobileLoginDto } from './dto/google-mobile-login.dto';
+import { SetPasswordDto } from './dto/set-password.dto'; // 🟢 IMPORTED
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -177,6 +178,28 @@ export class AuthController {
     await this.authService.changePassword(req.user.id, changePasswordDto);
     return { message: 'Password changed successfully.' };
   }
+
+  // --- 🟢 NEW ENDPOINT FOR SSO USERS ---
+  @ApiOperation({ summary: 'Set password for SSO users who have no password (User Only)' })
+  @ApiBearerAuth()
+  @ApiResponse({ status: 200, description: 'Password set successfully.' })
+  @ApiResponse({
+    status: 400,
+    description: 'User already has a password set (must use change-password).',
+  })
+  @ApiResponse({ status: 403, description: 'Forbidden.' })
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(RoleName.USER)
+  @Patch('set-password')
+  async setPassword(
+    @Request() req,
+    @Body() setPasswordDto: SetPasswordDto,
+  ) {
+    await this.authService.setPassword(req.user.id, setPasswordDto);
+    return { message: 'Password set successfully.' };
+  }
+  // -------------------------------------
 
   @ApiOperation({ summary: 'Get the profile of the current logged-in user (User Only)' })
   @ApiBearerAuth()

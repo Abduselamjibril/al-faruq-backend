@@ -21,6 +21,7 @@ import { RolesService } from '../roles/roles.service';
 import { RoleName } from '../roles/entities/role.entity';
 import { ChangeAdminCredentialsDto } from './dto/change-admin-credentials.dto';
 import { DevicesService } from '../devices/devices.service';
+import { SetPasswordDto } from './dto/set-password.dto'; // 🟢 IMPORTED
 
 export interface SocialProfile {
   provider: 'google' | 'facebook';
@@ -313,6 +314,23 @@ export class AuthService {
     }
 
     const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+    await this.usersService.update(userId, { password: hashedNewPassword });
+  }
+
+  // --- 🟢 NEW SERVICE METHOD FOR SSO PASSWORD SETTING ---
+  async setPassword(userId: number, setDto: SetPasswordDto): Promise<void> {
+    const { newPassword } = setDto;
+    const user = await this.usersService.findById(userId);
+
+    // Security Check: If password exists, deny.
+    if (user && user.password) {
+      throw new BadRequestException(
+        'User already has a password set. Please use the change-password endpoint.',
+      );
+    }
+
+    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+    // Update and ensure provider is still accurate (optional, but good practice)
     await this.usersService.update(userId, { password: hashedNewPassword });
   }
 
