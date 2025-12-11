@@ -89,7 +89,8 @@ export class AuthController {
   @Post('google-mobile')
   // We use the DTO here to ensure validation works and the token is not stripped out
   async googleMobileLogin(@Body() loginDto: GoogleMobileLoginDto) {
-    return this.authService.loginWithGoogleMobile(loginDto.token);
+  const user = await this.authService.loginWithGoogleMobile(loginDto.token);
+    return this.authService.login(user);
   }
 
   @ApiOperation({ summary: 'Request a password reset OTP' })
