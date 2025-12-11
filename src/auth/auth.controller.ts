@@ -61,7 +61,6 @@ export class AuthController {
     return this.authService.register(registerDto);
   }
 
-  // --- THIS METHOD HAS BEEN UPDATED ---
   @ApiOperation({ summary: 'Log in a user' })
   @ApiBody({ type: LoginUserDto })
   @ApiResponse({
@@ -72,7 +71,7 @@ export class AuthController {
     status: 401,
     description: 'Unauthorized, invalid credentials.',
   })
-  @ApiResponse({ status: 403, description: 'Device limit reached.' }) // New error response
+  @ApiResponse({ status: 403, description: 'Device limit reached.' })
   @HttpCode(HttpStatus.OK)
   @UseGuards(LocalAuthGuard)
   @Post('login')
@@ -81,7 +80,17 @@ export class AuthController {
     await this.authService.checkDeviceLimit(req.user.id);
     return this.authService.login(req.user);
   }
-  // --- END OF UPDATE ---
+
+  // --- NEW ENDPOINT FOR MOBILE GOOGLE LOGIN ---
+  @ApiOperation({ summary: 'Login with Google ID Token (Mobile)' })
+  @ApiResponse({ status: 200, description: 'Login successful, returns JWT.' })
+  @ApiResponse({ status: 401, description: 'Invalid Token.' })
+  @Post('google-mobile')
+  async googleMobileLogin(@Body('token') token: string) {
+    // The mobile app sends { "token": "..." }
+    // We pass that token string to the service
+    return this.authService.loginWithGoogleMobile(token);
+  }
 
   @ApiOperation({ summary: 'Request a password reset OTP' })
   @ApiResponse({

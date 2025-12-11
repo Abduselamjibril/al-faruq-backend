@@ -7,6 +7,8 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import { OAuth2Client } from 'google-auth-library';
 import { UsersService } from '../users/users.service';
 import * as bcrypt from 'bcrypt';
 import { RegisterUserDto } from './dto/register-user.dto';
@@ -17,7 +19,7 @@ import { MailService } from '../mail/mail.service';
 import { RolesService } from '../roles/roles.service';
 import { RoleName } from '../roles/entities/role.entity';
 import { ChangeAdminCredentialsDto } from './dto/change-admin-credentials.dto';
-import { DevicesService } from '../devices/devices.service'; // --- 1. IMPORT DevicesService ---
+import { DevicesService } from '../devices/devices.service';
 
 export interface SocialProfile {
   provider: 'google' | 'facebook';
@@ -29,13 +31,61 @@ export interface SocialProfile {
 
 @Injectable()
 export class AuthService {
+  private googleClient: OAuth2Client;
+
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
     private mailService: MailService,
     private rolesService: RolesService,
-    private devicesService: DevicesService, // --- 2. INJECT DevicesService ---
-  ) {}
+    private devicesService: DevicesService,
+    private configService: ConfigService,
+  ) {
+    // Initialize Google OAuth2 Client
+    // We use || '' to handle potential undefined values from config
+    const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID') || '';
+    this.googleClient = new OAuth2Client(clientId);
+  }
+
+  // --- NEW METHOD FOR MOBILE GOOGLE LOGIN ---
+  async loginWithGoogleMobile(token: string): Promise<any> {
+    try {
+      const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID') || '';
+
+      // 1. Verify the ID Token with Google
+      const ticket = await this.googleClient.verifyIdToken({
+        idToken: token,
+        audience: clientId,
+      });
+
+      const payload = ticket.getPayload();
+      if (!payload) {
+        throw new BadRequestException('Invalid Google Token payload');
+      }
+
+      // 2. Construct the SocialProfile object
+      // We use || '' to ensure we pass a string, even if Google returns undefined
+      const socialProfile: SocialProfile = {
+        provider: 'google',
+        providerId: payload.sub,
+        email: payload.email || '', 
+        firstName: payload.given_name || '',
+        lastName: payload.family_name || '',
+      };
+
+      // 3. Find or Create the user (Reuse existing logic)
+      const user = await this.validateSocialLogin(socialProfile);
+
+      // 4. Check device limits (Reuse existing logic)
+      await this.checkDeviceLimit(user.id);
+
+      // 5. Generate JWT Token
+      return this.login(user);
+    } catch (error) {
+      console.error('Mobile Google Login Error:', error);
+      throw new UnauthorizedException('Invalid or expired Google Token');
+    }
+  }
 
   async validateSocialLogin(profile: SocialProfile): Promise<User> {
     let user = await this.usersService.findByProviderId(
@@ -150,11 +200,11 @@ export class AuthService {
       role: user.role.name,
     };
     return {
-      access_token: this.jwtService.sign(payload),
+      // Token expires in 100 years (Lifetime session)
+      access_token: this.jwtService.sign(payload, { expiresIn: '100y' }),
     };
   }
 
-  // --- 3. NEW METHOD TO CHECK DEVICE LIMIT ---
   async checkDeviceLimit(userId: number): Promise<void> {
     const deviceCount = await this.devicesService.countByUserId(userId);
     // We check for 3 or more. You can change this number easily.
