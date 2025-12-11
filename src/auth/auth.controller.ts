@@ -38,6 +38,7 @@ import {
 } from '@nestjs/swagger';
 import { LoginUserDto } from './dto/login-user.dto';
 import { ChangeAdminCredentialsDto } from './dto/change-admin-credentials.dto';
+import { GoogleMobileLoginDto } from './dto/google-mobile-login.dto'; // <--- IMPORT THE NEW DTO
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -81,15 +82,14 @@ export class AuthController {
     return this.authService.login(req.user);
   }
 
-  // --- NEW ENDPOINT FOR MOBILE GOOGLE LOGIN ---
+  // --- UPDATED ENDPOINT FOR MOBILE GOOGLE LOGIN ---
   @ApiOperation({ summary: 'Login with Google ID Token (Mobile)' })
   @ApiResponse({ status: 200, description: 'Login successful, returns JWT.' })
   @ApiResponse({ status: 401, description: 'Invalid Token.' })
   @Post('google-mobile')
-  async googleMobileLogin(@Body('token') token: string) {
-    // The mobile app sends { "token": "..." }
-    // We pass that token string to the service
-    return this.authService.loginWithGoogleMobile(token);
+  // We use the DTO here to ensure validation works and the token is not stripped out
+  async googleMobileLogin(@Body() loginDto: GoogleMobileLoginDto) {
+    return this.authService.loginWithGoogleMobile(loginDto.token);
   }
 
   @ApiOperation({ summary: 'Request a password reset OTP' })
