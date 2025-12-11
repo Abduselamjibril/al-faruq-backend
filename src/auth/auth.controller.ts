@@ -88,8 +88,8 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Invalid Token.' })
   @Post('google-mobile')
   async googleMobileLogin(@Body() loginDto: GoogleMobileLoginDto) {
-    // FIX: loginWithGoogleMobile ALREADY returns the JWT token.
-    // We return it directly. Do NOT call this.authService.login() again.
+    // FIX: Just return the result. DO NOT call this.authService.login() here.
+    // The service already returns { access_token: "..." }
     return this.authService.loginWithGoogleMobile(loginDto.token);
   }
 
