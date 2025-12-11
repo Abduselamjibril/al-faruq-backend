@@ -200,8 +200,8 @@ export class AuthService {
       role: user.role.name,
     };
     return {
-      // Token expires in 100 years (Lifetime session)
-      access_token: this.jwtService.sign(payload, { expiresIn: '100y' }),
+      // UPDATED: No second argument. Uses the global expiration from AuthModule.
+      access_token: this.jwtService.sign(payload),
     };
   }
 

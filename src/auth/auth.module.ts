@@ -26,19 +26,25 @@ import { DevicesModule } from '../devices/devices.module';
       inject: [ConfigService],
       useFactory: async (configService: ConfigService) => {
         const jwtSecret = configService.get<string>('JWT_SECRET');
-        // --- THIS IS THE FINAL FIX ---
-        // Read the value as a number from the .env file (e.g., 86400)
-        const jwtExpiresIn = configService.get<number>('JWT_EXPIRES_IN');
+        const jwtExpiresInRaw = configService.get<string>('JWT_EXPIRES_IN');
 
-        if (!jwtSecret || jwtExpiresIn === undefined) {
-          throw new Error('JWT configuration (JWT_SECRET or JWT_EXPIRES_IN) is missing or invalid in .env file.');
+        if (!jwtSecret || !jwtExpiresInRaw) {
+          throw new Error('JWT configuration (JWT_SECRET or JWT_EXPIRES_IN) is missing in .env file.');
         }
+
+        // Logic: Check if the value is purely numeric (e.g. "3600").
+        // If yes, parse to number (seconds).
+        // If no (e.g. "100y", "1d"), keep as string (library handles units).
+        const expiresIn = /^\d+$/.test(jwtExpiresInRaw)
+          ? parseInt(jwtExpiresInRaw, 10)
+          : jwtExpiresInRaw;
 
         return {
           secret: jwtSecret,
           signOptions: {
-            // This will now be a number, which satisfies the library's type requirement.
-            expiresIn: jwtExpiresIn,
+            // UPDATED: Cast to 'any' to fix the TypeScript mismatch 
+            // between generic 'string' and the library's 'StringValue' type.
+            expiresIn: expiresIn as any,
           },
         };
       },
