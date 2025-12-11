@@ -1,4 +1,5 @@
 import {
+  ClassSerializerInterceptor, // <--- IMPORT THIS
   Controller,
   Delete,
   Get,
@@ -8,6 +9,7 @@ import {
   ParseIntPipe,
   Query,
   UseGuards,
+  UseInterceptors, // <--- IMPORT THIS
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -26,6 +28,7 @@ import { UsersService } from './users.service';
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(RoleName.ADMIN)
+@UseInterceptors(ClassSerializerInterceptor) // <--- CRITICAL ADDITION
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}

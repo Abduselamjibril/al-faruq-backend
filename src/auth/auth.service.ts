@@ -5,6 +5,7 @@ import {
   Injectable,
   InternalServerErrorException,
   UnauthorizedException,
+  Logger, // 🟢 IMPORT LOGGER
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -31,6 +32,8 @@ export interface SocialProfile {
 
 @Injectable()
 export class AuthService {
+  // 🟢 INITIALIZE LOGGER
+  private readonly logger = new Logger(AuthService.name);
   private googleClient: OAuth2Client;
 
   constructor(
@@ -49,10 +52,13 @@ export class AuthService {
 
   // --- NEW METHOD FOR MOBILE GOOGLE LOGIN ---
   async loginWithGoogleMobile(token: string): Promise<any> {
+    this.logger.log('Starting Google Mobile Login flow...'); // 🟢 LOG
+
     try {
       const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID') || '';
 
       // 1. Verify the ID Token with Google
+      this.logger.debug('Verifying ID Token with Google...'); // 🟢 LOG
       const ticket = await this.googleClient.verifyIdToken({
         idToken: token,
         audience: clientId,
@@ -60,8 +66,20 @@ export class AuthService {
 
       const payload = ticket.getPayload();
       if (!payload) {
+        this.logger.error('Google Token payload was empty.'); // 🟢 LOG
         throw new BadRequestException('Invalid Google Token payload');
       }
+
+      this.logger.debug(`Token verified. Email: ${payload.email}, Verified: ${payload.email_verified}`); // 🟢 LOG
+
+      // --- SECURITY UPDATE: Check if email is verified ---
+      if (!payload.email_verified) {
+        this.logger.warn(`Login blocked: Email ${payload.email} is not verified by Google.`); // 🟢 LOG
+        throw new BadRequestException(
+          'Google email is not verified. Please verify your email with Google first.',
+        );
+      }
+      // --------------------------------------------------
 
       // 2. Construct the SocialProfile object
       // We use || '' to ensure we pass a string, even if Google returns undefined
@@ -74,25 +92,35 @@ export class AuthService {
       };
 
       // 3. Find or Create the user (Reuse existing logic)
+      this.logger.log('Validating/Creating user from Social Profile...'); // 🟢 LOG
       const user = await this.validateSocialLogin(socialProfile);
+      this.logger.log(`User processed successfully. ID: ${user.id}`); // 🟢 LOG
 
       // 4. Check device limits (Reuse existing logic)
+      this.logger.debug(`Checking device limits for User ID: ${user.id}`); // 🟢 LOG
       await this.checkDeviceLimit(user.id);
 
       // 5. Generate JWT Token
+      this.logger.log('Generating JWT token...'); // 🟢 LOG
       return this.login(user);
     } catch (error) {
-      console.error('Mobile Google Login Error:', error);
+      // If we threw a BadRequestException explicitly (like email not verified), rethrow it.
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      this.logger.error('Mobile Google Login Failed', error.stack); // 🟢 LOG
       throw new UnauthorizedException('Invalid or expired Google Token');
     }
   }
 
   async validateSocialLogin(profile: SocialProfile): Promise<User> {
+    this.logger.debug(`Searching for user by Provider ID: ${profile.providerId} (${profile.provider})`); // 🟢 LOG
     let user = await this.usersService.findByProviderId(
       profile.provider,
       profile.providerId,
     );
     if (user) {
+      this.logger.log('User found by Provider ID.'); // 🟢 LOG
       return user;
     }
 
@@ -101,9 +129,11 @@ export class AuthService {
     }
 
     const lowercasedEmail = profile.email.toLowerCase();
+    this.logger.debug(`User not found by Provider ID. Searching by email: ${lowercasedEmail}`); // 🟢 LOG
 
     const existingUser = await this.usersService.findByEmail(lowercasedEmail);
     if (existingUser) {
+      this.logger.log('User found by Email. Linking account...'); // 🟢 LOG
       const updateData: Partial<User> = {};
       if (profile.provider === 'google') {
         updateData.googleId = profile.providerId;
@@ -115,8 +145,10 @@ export class AuthService {
       return this.usersService.update(existingUser.id, updateData);
     }
 
+    this.logger.log('No existing user found. Creating new user...'); // 🟢 LOG
     const defaultRole = await this.rolesService.findByName(RoleName.USER);
     if (!defaultRole) {
+      this.logger.error('Default user role (USER) not found in DB.'); // 🟢 LOG
       throw new InternalServerErrorException('Default user role not found.');
     }
 
