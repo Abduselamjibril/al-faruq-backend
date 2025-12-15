@@ -37,79 +37,54 @@ export class CloudinaryAdapter implements IUploadAdapter {
     }
 
     try {
-      // --- [NEW LOGIC] Special handling for PDFs to check for duplicates ---
-      if (type === 'pdf') {
-        const fileNameWithoutExt = path.parse(file.originalname).name;
-        const publicId = `${folder}/${fileNameWithoutExt}`;
-
-        console.log(`[Adapter] Checking for existence of public_id: ${publicId}`);
-
-        const exists = await this.resourceExists(publicId);
-        if (exists) {
-          throw new ConflictException(
-            `File with name "${file.originalname}" already exists.`,
-          );
-        }
-
-        // If it does not exist, proceed with a controlled upload
-        const result = await this.uploadStream(file, {
-          folder: folder,
-          public_id: publicId,
-          resource_type: 'raw',
-          overwrite: false, // Important safety rule
-        });
-
-        console.log(
-          '[Adapter] Cloudinary upload successful. Response:',
-          JSON.stringify(result, null, 2),
-        );
-
-        return {
-          url: result.secure_url,
-          provider_id: result.public_id,
-        };
-      } else {
-        // --- Original logic for non-PDF files ---
-        console.log(`[Adapter] Starting upload for file: ${file.originalname}`);
-        const resourceType = (type === 'video' || type === 'audio') ? 'video' : 'image';
-        const result = await this.uploadStream(file, {
-          folder: folder,
-          resource_type: resourceType,
-        });
-
-        console.log(
-          '[Adapter] Cloudinary upload successful. Response:',
-          JSON.stringify(result, null, 2),
-        );
-
-        if (type === 'video') {
-          const eagerResult = result.eager?.[0];
-          if (!eagerResult || !eagerResult.secure_url) {
-            throw new InternalServerErrorException(
-              'Cloudinary did not return an eager transformation result for the video.',
-            );
+      // Always upload, no existence check. Auto-rename if duplicate.
+      const fileNameWithoutExt = path.parse(file.originalname).name;
+      const ext = path.parse(file.originalname).ext;
+      let publicId = `${folder}/${fileNameWithoutExt}`;
+      let uploadResult: UploadApiResponse | null = null;
+      let attempt = 1;
+      let finalPublicId = publicId;
+      while (true) {
+        try {
+          uploadResult = await this.uploadStream(file, {
+            folder: folder,
+            public_id: finalPublicId,
+            resource_type: type === 'pdf' ? 'raw' : (type === 'video' || type === 'audio') ? 'video' : 'image',
+            overwrite: false,
+            eager: type === 'video' ? [{ streaming_profile: 'hd', format: 'm3u8' }] : undefined,
+          });
+          break;
+        } catch (err: any) {
+          // If duplicate, try next name
+          if (err && err.error && err.error.http_code === 409) {
+            attempt++;
+            finalPublicId = `${publicId}(${attempt})`;
+            continue;
           }
-          const hlsUrl = eagerResult.secure_url.replace(/\.mp4$/, '.m3u8');
-          return {
-            url: hlsUrl,
-            provider_id: result.public_id,
-          };
+          throw err;
         }
-
+      }
+      if (!uploadResult) {
+        throw new InternalServerErrorException('Cloudinary upload failed with no result.');
+      }
+      console.log('[Adapter] Cloudinary upload successful. Response:', JSON.stringify(uploadResult, null, 2));
+      if (type === 'video') {
+        const eagerResult = uploadResult.eager?.[0];
+        if (!eagerResult || !eagerResult.secure_url) {
+          throw new InternalServerErrorException('Cloudinary did not return an eager transformation result for the video.');
+        }
+        const hlsUrl = eagerResult.secure_url.replace(/\.mp4$/, '.m3u8');
         return {
-          url: result.secure_url,
-          provider_id: result.public_id,
+          url: hlsUrl,
+          provider_id: uploadResult.public_id,
         };
       }
+      return {
+        url: uploadResult.secure_url,
+        provider_id: uploadResult.public_id,
+      };
     } catch (error) {
-      // Re-throw ConflictException directly, otherwise wrap other errors
-      if (error instanceof ConflictException) {
-        throw error;
-      }
-      console.error(
-        'Cloudinary upload failed. Full error object:',
-        JSON.stringify(error, null, 2),
-      );
+      console.error('Cloudinary upload failed. Full error object:', JSON.stringify(error, null, 2));
       throw new InternalServerErrorException('Failed to upload file to Cloudinary.');
     }
   }
