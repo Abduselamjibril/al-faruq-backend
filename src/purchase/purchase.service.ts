@@ -234,25 +234,41 @@ export class PurchaseService {
     return parseFloat(totalPrice.toString());
   }
 
-  async verifyAndGrantAccess(chapaResponse: any): Promise<void> {
+  // UPDATED: Now returns Promise<boolean> (true = success, false = failure)
+  async verifyAndGrantAccess(chapaResponse: any): Promise<boolean> {
     this.logger.log('[verifyAndGrantAccess] Webhook received from Chapa.');
     this.logger.debug(`[verifyAndGrantAccess] Full webhook payload: ${JSON.stringify(chapaResponse, null, 2)}`);
     const { tx_ref } = chapaResponse;
     if (!tx_ref) {
       this.logger.warn('[verifyAndGrantAccess] Webhook called without tx_ref. Aborting.');
-      return;
+      return false; // FAIL: No tx_ref
     }
     this.logger.log(`[verifyAndGrantAccess] Processing webhook for tx_ref: ${tx_ref}`);
 
     const pendingTx = await this.pendingTransactionRepository.findOneBy({
       tx_ref,
     });
+    
     if (!pendingTx) {
+      // HANDLE RACE CONDITION:
+      // If Webhook ran before Redirect, pendingTx is gone, but Purchase exists.
+      // We must check if it was actually successful.
+      const existingPurchase = await this.purchaseRepository.findOneBy({
+        chapaTransactionId: tx_ref,
+      });
+      if (existingPurchase) {
+        this.logger.debug(
+          `[verifyAndGrantAccess] Purchase already completed for ${tx_ref}. Access granted.`,
+        );
+        return true; // SUCCESS: Already verified
+      }
+      
       this.logger.warn(
         `[verifyAndGrantAccess] Webhook for unknown or already processed tx_ref received: ${tx_ref}. Aborting.`,
       );
-      return;
+      return false; // FAIL: Unknown transaction
     }
+    
     this.logger.debug(`[verifyAndGrantAccess] Found matching pending transaction for tx_ref: ${tx_ref}`);
 
     try {
@@ -271,7 +287,7 @@ export class PurchaseService {
 
       if (verificationResponse.data.status !== 'success') {
         this.logger.error(`[verifyAndGrantAccess] Chapa verification FAILED for tx_ref: ${tx_ref}`);
-        return;
+        return false; // FAIL: Payment not successful
       }
       this.logger.log(`[verifyAndGrantAccess] Chapa verification SUCCESSFUL for tx_ref: ${tx_ref}`);
 
@@ -287,7 +303,7 @@ export class PurchaseService {
         this.logger.error(
           `[verifyAndGrantAccess] Invalid user or content ID found in pending transaction for tx_ref: ${tx_ref}`,
         );
-        return;
+        return false; // FAIL: Data integrity issue
       }
 
       const purchasedDurationDays = pendingTx.durationDays;
@@ -311,12 +327,14 @@ export class PurchaseService {
       this.logger.log(`[verifyAndGrantAccess] Pending transaction record removed for tx_ref: ${tx_ref}`);
 
       this.logger.log(`SUCCESS: Access granted to user ${userId} for content ${contentId}`);
+      return true; // SUCCESS: Verification complete
     } catch (error) {
       const axiosError = error as { response?: AxiosResponse };
       this.logger.error(
         `[verifyAndGrantAccess] Chapa Verification/Granting Error for tx_ref: ${tx_ref}`,
         axiosError.response?.data || error.message,
       );
+      return false; // FAIL: Error during process
     }
   }
 }

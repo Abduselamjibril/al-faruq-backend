@@ -1,3 +1,5 @@
+// src/purchase/purchase.controller.ts
+
 import {
   Controller,
   Post,
@@ -80,7 +82,7 @@ export class PurchaseController {
     return this.purchaseService.initiatePurchase(user.id, initiatePurchaseDto);
   }
 
-  // --- BRIDGE ENDPOINT (Automatic Redirect) ---
+  // --- UPDATED BRIDGE ENDPOINT (Conditional Redirect) ---
   @Get('verify-redirect')
   @ApiOperation({
     summary: 'Handle Chapa return, verify transaction, and Auto-Redirect to App',
@@ -89,30 +91,39 @@ export class PurchaseController {
     @Query('tx_ref') tx_ref: string,
     @Res() res: Response,
   ) {
+    let isSuccess = false;
+
     // 1. Verify the transaction
     if (tx_ref) {
-      // We verify immediately so the user has access before the app opens
-      await this.purchaseService.verifyAndGrantAccess({ tx_ref });
+      // capture the result (true/false) from the service
+      isSuccess = await this.purchaseService.verifyAndGrantAccess({ tx_ref });
     }
 
     // 2. Prepare the App Link
-    // Make sure .env has: FLUTTER_RETURN_URL=app://alfaruq/purchase-success
-    const flutterReturnUrl =
-      process.env.FLUTTER_RETURN_URL || 'app://alfaruq/purchase-success';
+    // Define both Success and Failure URLs.
+    // Ensure these are handled in your Flutter App.
+    const successUrl = process.env.FLUTTER_RETURN_URL || 'app://alfaruq/purchase-success';
+    const failedUrl = process.env.FLUTTER_FAILED_URL || 'app://alfaruq/purchase-failed';
 
-    // 3. Send Automatic Javascript Redirect (The Fix for Android)
-    // We send HTML with a script instead of using res.redirect()
+    // 3. Select target URL based on success status
+    const targetUrl = isSuccess ? successUrl : failedUrl;
+
+    // 4. Send Automatic Javascript Redirect (The Fix for Android)
     const html = `
       <!DOCTYPE html>
       <html>
       <head>
-          <title>Redirecting...</title>
+          <title>${isSuccess ? 'Payment Successful' : 'Payment Failed'}</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <script>
               // Automatically open the app immediately
-              window.location.href = "${flutterReturnUrl}";
+              window.location.href = "${targetUrl}";
           </script>
       </head>
       <body>
+        <p style="text-align: center; margin-top: 50px;">
+           ${isSuccess ? 'Redirecting to App...' : 'Payment Failed. Redirecting...'}
+        </p>
       </body>
       </html>
     `;
@@ -127,7 +138,7 @@ export class PurchaseController {
   async chapaWebhook(@Body() body: any, @Req() req: any) {
     const chapaResponse = Object.keys(body).length > 0 ? body : req.query;
     console.log('Chapa webhook received:', chapaResponse);
-    this.purchaseService.verifyAndGrantAccess(chapaResponse);
+    await this.purchaseService.verifyAndGrantAccess(chapaResponse);
     return;
   }
 }
