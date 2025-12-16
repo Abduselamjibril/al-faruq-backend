@@ -1,3 +1,4 @@
+   
 import {
   Body,
   Controller,
@@ -40,6 +41,7 @@ import { LoginUserDto } from './dto/login-user.dto';
 import { ChangeAdminCredentialsDto } from './dto/change-admin-credentials.dto';
 import { GoogleMobileLoginDto } from './dto/google-mobile-login.dto';
 import { SetPasswordDto } from './dto/set-password.dto'; // 🟢 IMPORTED
+
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -255,6 +257,13 @@ export class AuthController {
     @Body() changeAdminCredentialsDto: ChangeAdminCredentialsDto,
   ) {
     return this.authService.changeAdminCredentials(req.user.id, changeAdminCredentialsDto);
+  }
+
+  @ApiOperation({ summary: 'Get a guest token (no credentials required)' })
+  @ApiResponse({ status: 200, description: 'Returns a JWT token for guest access.' })
+  @Post('guest-token')
+  async guestToken() {
+    return this.authService.guestToken();
   }
 
   @ApiOperation({ summary: 'Access an admin-only protected route' })

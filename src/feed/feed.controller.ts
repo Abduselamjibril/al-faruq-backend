@@ -42,7 +42,7 @@ export class FeedController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(RoleName.USER)
+  @Roles(RoleName.USER, RoleName.GUEST)
   @Get()
   @ApiOperation({
     summary: "Get the paginated and filterable main content feed for the user's home screen (User Only)",
@@ -86,7 +86,7 @@ export class FeedController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(RoleName.USER)
+  @Roles(RoleName.USER, RoleName.GUEST)
   @Get(':id')
   @ApiOperation({ summary: 'Get detailed information for a specific content item (User Only)' })
   @ApiResponse({

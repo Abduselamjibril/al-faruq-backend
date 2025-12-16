@@ -5,7 +5,7 @@ import {
   Injectable,
   InternalServerErrorException,
   UnauthorizedException,
-  Logger, // 🟢 IMPORT LOGGER
+  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -21,7 +21,7 @@ import { RolesService } from '../roles/roles.service';
 import { RoleName } from '../roles/entities/role.entity';
 import { ChangeAdminCredentialsDto } from './dto/change-admin-credentials.dto';
 import { DevicesService } from '../devices/devices.service';
-import { SetPasswordDto } from './dto/set-password.dto'; // 🟢 IMPORTED
+import { SetPasswordDto } from './dto/set-password.dto';
 
 export interface SocialProfile {
   provider: 'google' | 'facebook';
@@ -33,7 +33,6 @@ export interface SocialProfile {
 
 @Injectable()
 export class AuthService {
-  // 🟢 INITIALIZE LOGGER
   private readonly logger = new Logger(AuthService.name);
   private googleClient: OAuth2Client;
 
@@ -46,20 +45,19 @@ export class AuthService {
     private configService: ConfigService,
   ) {
     // Initialize Google OAuth2 Client
-    // We use || '' to handle potential undefined values from config
     const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID') || '';
     this.googleClient = new OAuth2Client(clientId);
   }
 
   // --- NEW METHOD FOR MOBILE GOOGLE LOGIN ---
   async loginWithGoogleMobile(token: string): Promise<any> {
-    this.logger.log('Starting Google Mobile Login flow...'); // 🟢 LOG
+    this.logger.log('Starting Google Mobile Login flow...');
 
     try {
       const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID') || '';
 
       // 1. Verify the ID Token with Google
-      this.logger.debug('Verifying ID Token with Google...'); // 🟢 LOG
+      this.logger.debug('Verifying ID Token with Google...');
       const ticket = await this.googleClient.verifyIdToken({
         idToken: token,
         audience: clientId,
@@ -67,15 +65,15 @@ export class AuthService {
 
       const payload = ticket.getPayload();
       if (!payload) {
-        this.logger.error('Google Token payload was empty.'); // 🟢 LOG
+        this.logger.error('Google Token payload was empty.');
         throw new BadRequestException('Invalid Google Token payload');
       }
 
-      this.logger.debug(`Token verified. Email: ${payload.email}, Verified: ${payload.email_verified}`); // 🟢 LOG
+      this.logger.debug(`Token verified. Email: ${payload.email}, Verified: ${payload.email_verified}`);
 
       // --- SECURITY UPDATE: Check if email is verified ---
       if (!payload.email_verified) {
-        this.logger.warn(`Login blocked: Email ${payload.email} is not verified by Google.`); // 🟢 LOG
+        this.logger.warn(`Login blocked: Email ${payload.email} is not verified by Google.`);
         throw new BadRequestException(
           'Google email is not verified. Please verify your email with Google first.',
         );
@@ -83,45 +81,43 @@ export class AuthService {
       // --------------------------------------------------
 
       // 2. Construct the SocialProfile object
-      // We use || '' to ensure we pass a string, even if Google returns undefined
       const socialProfile: SocialProfile = {
         provider: 'google',
         providerId: payload.sub,
-        email: payload.email || '', 
+        email: payload.email || '',
         firstName: payload.given_name || '',
         lastName: payload.family_name || '',
       };
 
-      // 3. Find or Create the user (Reuse existing logic)
-      this.logger.log('Validating/Creating user from Social Profile...'); // 🟢 LOG
+      // 3. Find or Create the user
+      this.logger.log('Validating/Creating user from Social Profile...');
       const user = await this.validateSocialLogin(socialProfile);
-      this.logger.log(`User processed successfully. ID: ${user.id}`); // 🟢 LOG
+      this.logger.log(`User processed successfully. ID: ${user.id}`);
 
-      // 4. Check device limits (Reuse existing logic)
-      this.logger.debug(`Checking device limits for User ID: ${user.id}`); // 🟢 LOG
+      // 4. Check device limits
+      this.logger.debug(`Checking device limits for User ID: ${user.id}`);
       await this.checkDeviceLimit(user.id);
 
       // 5. Generate JWT Token
-      this.logger.log('Generating JWT token...'); // 🟢 LOG
+      this.logger.log('Generating JWT token...');
       return this.login(user);
     } catch (error) {
-      // If we threw a BadRequestException explicitly (like email not verified), rethrow it.
       if (error instanceof BadRequestException) {
         throw error;
       }
-      this.logger.error('Mobile Google Login Failed', error.stack); // 🟢 LOG
+      this.logger.error('Mobile Google Login Failed', error.stack);
       throw new UnauthorizedException('Invalid or expired Google Token');
     }
   }
 
   async validateSocialLogin(profile: SocialProfile): Promise<User> {
-    this.logger.debug(`Searching for user by Provider ID: ${profile.providerId} (${profile.provider})`); // 🟢 LOG
+    this.logger.debug(`Searching for user by Provider ID: ${profile.providerId} (${profile.provider})`);
     let user = await this.usersService.findByProviderId(
       profile.provider,
       profile.providerId,
     );
     if (user) {
-      this.logger.log('User found by Provider ID.'); // 🟢 LOG
+      this.logger.log('User found by Provider ID.');
       return user;
     }
 
@@ -130,11 +126,11 @@ export class AuthService {
     }
 
     const lowercasedEmail = profile.email.toLowerCase();
-    this.logger.debug(`User not found by Provider ID. Searching by email: ${lowercasedEmail}`); // 🟢 LOG
+    this.logger.debug(`User not found by Provider ID. Searching by email: ${lowercasedEmail}`);
 
     const existingUser = await this.usersService.findByEmail(lowercasedEmail);
     if (existingUser) {
-      this.logger.log('User found by Email. Linking account...'); // 🟢 LOG
+      this.logger.log('User found by Email. Linking account...');
       const updateData: Partial<User> = {};
       if (profile.provider === 'google') {
         updateData.googleId = profile.providerId;
@@ -146,10 +142,10 @@ export class AuthService {
       return this.usersService.update(existingUser.id, updateData);
     }
 
-    this.logger.log('No existing user found. Creating new user...'); // 🟢 LOG
+    this.logger.log('No existing user found. Creating new user...');
     const defaultRole = await this.rolesService.findByName(RoleName.USER);
     if (!defaultRole) {
-      this.logger.error('Default user role (USER) not found in DB.'); // 🟢 LOG
+      this.logger.error('Default user role (USER) not found in DB.');
       throw new InternalServerErrorException('Default user role not found.');
     }
 
@@ -170,6 +166,35 @@ export class AuthService {
 
     return this.usersService.create(newUser);
   }
+
+  // --- GUEST TOKEN METHOD INTEGRATED HERE ---
+  async guestToken() {
+    // Find or create a guest user (no credentials, unique per request or a shared guest user)
+    let guestUser = await this.usersService.findByEmail('guest@guest.local');
+    
+    if (!guestUser) {
+      // Ensure RoleName.GUEST exists in your RoleName enum
+      const guestRole = await this.rolesService.findByName(RoleName.GUEST);
+      
+      if (!guestRole) {
+        // If 'GUEST' role doesn't exist in DB, this will throw
+        throw new InternalServerErrorException('Guest role not found.');
+      }
+      
+      guestUser = await this.usersService.create({
+        email: 'guest@guest.local',
+        firstName: 'Guest',
+        lastName: 'User',
+        role: guestRole,
+        agreedToTerms: false,
+        authProvider: AuthProvider.LOCAL,
+        password: null, // Ensure your User entity allows nullable password
+      });
+    }
+    
+    return this.login(guestUser);
+  }
+  // ------------------------------------------
 
   async register(registerDto: RegisterUserDto): Promise<User> {
     const { password, confirmPassword, phoneNumber, email, ...rest } =
@@ -233,14 +258,12 @@ export class AuthService {
       role: user.role.name,
     };
     return {
-      // UPDATED: No second argument. Uses the global expiration from AuthModule.
       access_token: this.jwtService.sign(payload),
     };
   }
 
   async checkDeviceLimit(userId: number): Promise<void> {
     const deviceCount = await this.devicesService.countByUserId(userId);
-    // We check for 3 or more. You can change this number easily.
     if (deviceCount >= 3) {
       throw new ForbiddenException('Device limit reached. Please log out from another device.');
     }
@@ -317,12 +340,10 @@ export class AuthService {
     await this.usersService.update(userId, { password: hashedNewPassword });
   }
 
-  // --- 🟢 NEW SERVICE METHOD FOR SSO PASSWORD SETTING ---
   async setPassword(userId: number, setDto: SetPasswordDto): Promise<void> {
     const { newPassword } = setDto;
     const user = await this.usersService.findById(userId);
 
-    // Security Check: If password exists, deny.
     if (user && user.password) {
       throw new BadRequestException(
         'User already has a password set. Please use the change-password endpoint.',
@@ -330,7 +351,6 @@ export class AuthService {
     }
 
     const hashedNewPassword = await bcrypt.hash(newPassword, 10);
-    // Update and ensure provider is still accurate (optional, but good practice)
     await this.usersService.update(userId, { password: hashedNewPassword });
   }
 

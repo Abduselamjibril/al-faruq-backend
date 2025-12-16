@@ -3,9 +3,11 @@
 import { User } from '../../users/entities/user.entity';
 import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
 
+
 export enum RoleName {
   ADMIN = 'ADMIN',
   USER = 'USER',
+  GUEST = 'GUEST',
 }
 
 @Entity()

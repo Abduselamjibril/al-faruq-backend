@@ -1,4 +1,4 @@
-import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
+import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { RoleName } from '../../roles/entities/role.entity';
 import { ROLES_KEY } from '../decorators/roles.decorator';
@@ -29,8 +29,11 @@ export class RolesGuard implements CanActivate {
       return false;
     }
 
+    // If user is GUEST and not allowed, throw a specific error
+    if (user.role === RoleName.GUEST && !requiredRoles.includes(RoleName.GUEST)) {
+      throw new ForbiddenException('User is in guest role and should register');
+    }
     // Check if the user's role is included in the list of required roles.
-    // This logic remains the same and works perfectly.
     return requiredRoles.some((role) => user.role === role);
   }
 }

@@ -75,7 +75,7 @@ export class SeedService {
   // --- END OF NEW METHOD ---
 
   private async seedRoles() {
-    const rolesToSeed = [RoleName.ADMIN, RoleName.USER];
+    const rolesToSeed = [RoleName.ADMIN, RoleName.USER, RoleName.GUEST];
     for (const roleName of rolesToSeed) {
       const roleExists = await this.roleRepository.findOne({
         where: { name: roleName },

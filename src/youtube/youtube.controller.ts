@@ -36,7 +36,7 @@ export class YoutubeController {
 
   @Get('playlist')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(RoleName.USER, RoleName.ADMIN)
+  @Roles(RoleName.USER, RoleName.ADMIN, RoleName.GUEST)
   @ApiOperation({ summary: 'Get the cached YouTube playlist' })
   @ApiQuery({
     name: 'status',
