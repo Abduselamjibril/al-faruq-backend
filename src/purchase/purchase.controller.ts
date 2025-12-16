@@ -80,27 +80,44 @@ export class PurchaseController {
     return this.purchaseService.initiatePurchase(user.id, initiatePurchaseDto);
   }
 
-  // --- NEW BRIDGE ENDPOINT ---
+  // --- BRIDGE ENDPOINT (Automatic Redirect) ---
   @Get('verify-redirect')
   @ApiOperation({
-    summary: 'Handle Chapa return, verify transaction, and redirect to App',
+    summary: 'Handle Chapa return, verify transaction, and Auto-Redirect to App',
   })
   async verifyAndRedirect(
     @Query('tx_ref') tx_ref: string,
     @Res() res: Response,
   ) {
-    // 1. Verify the transaction immediately on the server side
-    // This ensures access is granted even if the app fails to load
+    // 1. Verify the transaction
     if (tx_ref) {
+      // We verify immediately so the user has access before the app opens
       await this.purchaseService.verifyAndGrantAccess({ tx_ref });
     }
 
-    // 2. Redirect to the Flutter App (Deep Link)
-    // The browser will receive a 302 code and the OS will open the App
+    // 2. Prepare the App Link
+    // Make sure .env has: FLUTTER_RETURN_URL=app://alfaruq/purchase-success
     const flutterReturnUrl =
       process.env.FLUTTER_RETURN_URL || 'app://alfaruq/purchase-success';
-      
-    return res.redirect(flutterReturnUrl);
+
+    // 3. Send Automatic Javascript Redirect (The Fix for Android)
+    // We send HTML with a script instead of using res.redirect()
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+          <title>Redirecting...</title>
+          <script>
+              // Automatically open the app immediately
+              window.location.href = "${flutterReturnUrl}";
+          </script>
+      </head>
+      <body>
+      </body>
+      </html>
+    `;
+
+    res.send(html);
   }
 
   // --- WEBHOOK ENDPOINT (MUST REMAIN PUBLIC) ---
