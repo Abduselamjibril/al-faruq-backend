@@ -25,8 +25,13 @@ export class Tafsir extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   subtitle: string | null;
 
+
   @Column({ type: 'varchar' })
   audioUrl: string;
+
+  // Optional YouTube URL for video or audio tafsir
+  @Column({ type: 'varchar', nullable: true })
+  youtubeUrl: string | null;
 
   @Column({ type: 'integer' })
   surahId: number;

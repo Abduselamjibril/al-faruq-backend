@@ -52,6 +52,7 @@ export class CreateContentDto {
   @IsOptional()
   parentId?: string;
 
+
   @ApiProperty({
     description: 'The URL of the main video file (for MOVIE, EPISODE, etc.).',
     example: 'https://cdn.example.com/videos/inception.mp4',
@@ -69,6 +70,15 @@ export class CreateContentDto {
   @IsUrl()
   @IsNotEmpty()
   videoUrl?: string;
+
+  @ApiProperty({
+    description: 'Optional YouTube video or audio URL for this content.',
+    example: 'https://www.youtube.com/watch?v=abc123',
+    required: false,
+  })
+  @IsUrl()
+  @IsOptional()
+  youtubeUrl?: string;
 
   @ApiProperty({
     description: 'The URL of the main audio file (for PROPHET_HISTORY_EPISODE or BOOK).',

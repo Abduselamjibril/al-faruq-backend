@@ -29,6 +29,7 @@ export class CreateTafsirDto {
   @IsOptional()
   subtitle?: string;
 
+
   @ApiProperty({
     description: 'The public URL of the uploaded audio file.',
     example: 'https://cdn.example.com/audio/al-fatiha.mp3',
@@ -36,6 +37,15 @@ export class CreateTafsirDto {
   @IsUrl()
   @IsNotEmpty()
   audioUrl: string;
+
+  @ApiProperty({
+    description: 'Optional YouTube video or audio URL for this tafsir.',
+    example: 'https://www.youtube.com/watch?v=xyz456',
+    required: false,
+  })
+  @IsUrl()
+  @IsOptional()
+  youtubeUrl?: string;
 
   @ApiProperty({
     description: 'The Surah this audio belongs to.',

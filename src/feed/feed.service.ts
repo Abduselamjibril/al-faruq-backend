@@ -64,6 +64,7 @@ export class FeedService {
         content.videoUrl = null;
         content.audioUrl = null;
         content.pdfUrl = null;
+        content.youtubeUrl = null;
       } else if (content.isLocked && purchasedContentIds.has(content.id)) {
         content.isLocked = false;
         content.pricingTier = null;
@@ -174,6 +175,7 @@ export class FeedService {
       content.videoUrl = null;
       content.audioUrl = null;
       content.pdfUrl = null;
+      content.youtubeUrl = null;
     }
 
     return content;

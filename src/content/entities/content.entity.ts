@@ -44,8 +44,13 @@ export class Content extends BaseEntity {
   @Column({ type: 'varchar', nullable: true })
   thumbnailUrl: string | null;
 
+
   @Column({ type: 'varchar', nullable: true })
   videoUrl: string | null;
+
+  // Optional YouTube URL for video or audio
+  @Column({ type: 'varchar', nullable: true })
+  youtubeUrl: string | null;
 
   @Column({ type: 'varchar', nullable: true })
   audioUrl: string | null;
