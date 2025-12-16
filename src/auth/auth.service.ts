@@ -14,6 +14,9 @@ import { UsersService } from '../users/users.service';
 import * as bcrypt from 'bcrypt';
 import { RegisterUserDto } from './dto/register-user.dto';
 import { User, AuthProvider } from '../users/entities/user.entity';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { UserSession } from './entities/user-session.entity';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { MailService } from '../mail/mail.service';
@@ -43,6 +46,8 @@ export class AuthService {
     private rolesService: RolesService,
     private devicesService: DevicesService,
     private configService: ConfigService,
+    @InjectRepository(UserSession)
+    private userSessionRepository: Repository<UserSession>,
   ) {
     // Initialize Google OAuth2 Client
     const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID') || '';
@@ -251,7 +256,29 @@ export class AuthService {
     return null;
   }
 
+
+  /**
+   * Limit concurrent logins to 3 per user. If 4th login, deny and inform user.
+   * On successful login, create a UserSession record.
+   * On logout, you should remove or deactivate the session (not shown here).
+   */
   async login(user: User) {
+    // Count active sessions for this user
+    const activeSessions = await this.userSessionRepository.count({
+      where: { user: { id: user.id }, active: true },
+    });
+    if (activeSessions >= 3) {
+      throw new ForbiddenException('You are the 4th user to login with this credential. The limit of 3 concurrent logins has been reached.');
+    }
+
+    // Create a new session (optionally, generate a session token)
+    const session = this.userSessionRepository.create({
+      user,
+      active: true,
+      // Optionally, generate a sessionToken here if you want to track sessions for logout
+    });
+    await this.userSessionRepository.save(session);
+
     const payload = {
       email: user.email,
       sub: user.id,
@@ -259,6 +286,8 @@ export class AuthService {
     };
     return {
       access_token: this.jwtService.sign(payload),
+      message: 'Login successful',
+      sessionId: session.id,
     };
   }
 

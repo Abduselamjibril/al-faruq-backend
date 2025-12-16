@@ -11,6 +11,7 @@ import { Purchase } from '../../purchase/entities/purchase.entity';
 import { Role } from '../../roles/entities/role.entity';
 import { Device } from '../../devices/entities/device.entity';
 import { UserNotificationStatus } from '../../notifications/entities/user-notification-status.entity';
+import { UserSession } from '../../auth/entities/user-session.entity';
 
 export enum AuthProvider {
   LOCAL = 'LOCAL',
@@ -76,8 +77,12 @@ export class User {
   @OneToMany(() => Purchase, (purchase) => purchase.user)
   purchases: Purchase[];
 
+
   @OneToMany(() => Device, (device) => device.user)
   devices: Device[];
+
+  @OneToMany(() => UserSession, (session) => session.user)
+  userSessions: UserSession[];
 
   // --- NEW NOTIFICATION STATUS RELATIONSHIP ADDED BELOW ---
   @OneToMany(

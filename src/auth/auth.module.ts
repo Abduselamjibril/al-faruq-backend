@@ -11,6 +11,9 @@ import { MailModule } from '../mail/mail.module';
 import { RolesModule } from '../roles/roles.module';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { FacebookStrategy } from './strategies/facebook.strategy';
+
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { UserSession } from './entities/user-session.entity';
 import { DevicesModule } from '../devices/devices.module';
 
 @Module({
@@ -21,6 +24,7 @@ import { DevicesModule } from '../devices/devices.module';
     MailModule,
     RolesModule,
     DevicesModule,
+    TypeOrmModule.forFeature([UserSession]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
