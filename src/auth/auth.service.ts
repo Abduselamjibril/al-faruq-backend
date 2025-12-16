@@ -54,7 +54,33 @@ export class AuthService {
     this.googleClient = new OAuth2Client(clientId);
   }
 
-  // --- NEW METHOD FOR MOBILE GOOGLE LOGIN ---
+  /**
+   * Logout: Mark a session as inactive by sessionId
+   */
+  async logout(sessionId: number): Promise<void> {
+    const session = await this.userSessionRepository.findOne({
+      where: { id: sessionId },
+    });
+    if (!session) {
+      this.logger.warn(`Logout failed: Invalid sessionId=${sessionId}`);
+      throw new BadRequestException('Invalid session ID');
+    }
+    session.active = false;
+    await this.userSessionRepository.save(session);
+    this.logger.log(`Session logged out: sessionId=${sessionId}, userId=${session.user?.id}`);
+  }
+
+  /**
+   * Admin: Force logout all sessions for a user (deactivate all active sessions)
+   */
+  async forceLogoutAllSessions(userId: number): Promise<void> {
+    const result = await this.userSessionRepository.update(
+      { user: { id: userId }, active: true },
+      { active: false },
+    );
+    this.logger.log(`Admin forced logout for userId=${userId}. Updated ${result.affected} sessions.`);
+  }
+
   async loginWithGoogleMobile(token: string): Promise<any> {
     this.logger.log('Starting Google Mobile Login flow...');
 
@@ -74,16 +100,19 @@ export class AuthService {
         throw new BadRequestException('Invalid Google Token payload');
       }
 
-      this.logger.debug(`Token verified. Email: ${payload.email}, Verified: ${payload.email_verified}`);
+      this.logger.debug(
+        `Token verified. Email: ${payload.email}, Verified: ${payload.email_verified}`,
+      );
 
       // --- SECURITY UPDATE: Check if email is verified ---
       if (!payload.email_verified) {
-        this.logger.warn(`Login blocked: Email ${payload.email} is not verified by Google.`);
+        this.logger.warn(
+          `Login blocked: Email ${payload.email} is not verified by Google.`,
+        );
         throw new BadRequestException(
           'Google email is not verified. Please verify your email with Google first.',
         );
       }
-      // --------------------------------------------------
 
       // 2. Construct the SocialProfile object
       const socialProfile: SocialProfile = {
@@ -116,7 +145,9 @@ export class AuthService {
   }
 
   async validateSocialLogin(profile: SocialProfile): Promise<User> {
-    this.logger.debug(`Searching for user by Provider ID: ${profile.providerId} (${profile.provider})`);
+    this.logger.debug(
+      `Searching for user by Provider ID: ${profile.providerId} (${profile.provider})`,
+    );
     let user = await this.usersService.findByProviderId(
       profile.provider,
       profile.providerId,
@@ -127,11 +158,15 @@ export class AuthService {
     }
 
     if (!profile.email) {
-      throw new BadRequestException('Email not provided by the social provider.');
+      throw new BadRequestException(
+        'Email not provided by the social provider.',
+      );
     }
 
     const lowercasedEmail = profile.email.toLowerCase();
-    this.logger.debug(`User not found by Provider ID. Searching by email: ${lowercasedEmail}`);
+    this.logger.debug(
+      `User not found by Provider ID. Searching by email: ${lowercasedEmail}`,
+    );
 
     const existingUser = await this.usersService.findByEmail(lowercasedEmail);
     if (existingUser) {
@@ -172,20 +207,17 @@ export class AuthService {
     return this.usersService.create(newUser);
   }
 
-  // --- GUEST TOKEN METHOD INTEGRATED HERE ---
   async guestToken() {
-    // Find or create a guest user (no credentials, unique per request or a shared guest user)
     let guestUser = await this.usersService.findByEmail('guest@guest.local');
-    
+
+    // Always ensure guest user has GUEST role
+    const guestRole = await this.rolesService.findByName(RoleName.GUEST);
+    if (!guestRole) {
+      this.logger.error('Guest role not found.');
+      throw new InternalServerErrorException('Guest role not found.');
+    }
+
     if (!guestUser) {
-      // Ensure RoleName.GUEST exists in your RoleName enum
-      const guestRole = await this.rolesService.findByName(RoleName.GUEST);
-      
-      if (!guestRole) {
-        // If 'GUEST' role doesn't exist in DB, this will throw
-        throw new InternalServerErrorException('Guest role not found.');
-      }
-      
       guestUser = await this.usersService.create({
         email: 'guest@guest.local',
         firstName: 'Guest',
@@ -193,13 +225,18 @@ export class AuthService {
         role: guestRole,
         agreedToTerms: false,
         authProvider: AuthProvider.LOCAL,
-        password: null, // Ensure your User entity allows nullable password
+        password: null,
       });
+      this.logger.log('Created new guest user.');
+    } else if (guestUser.role?.name !== RoleName.GUEST) {
+      // Update role if not GUEST
+      guestUser = await this.usersService.update(guestUser.id, { role: guestRole });
+      this.logger.log('Updated guest user to GUEST role.');
     }
-    
+
+    this.logger.log(`Guest token requested. userId=${guestUser.id}`);
     return this.login(guestUser);
   }
-  // ------------------------------------------
 
   async register(registerDto: RegisterUserDto): Promise<User> {
     const { password, confirmPassword, phoneNumber, email, ...rest } =
@@ -246,8 +283,7 @@ export class AuthService {
   }
 
   async validateUser(loginIdentifier: string, pass: string): Promise<any> {
-    const user =
-      await this.usersService.findByLoginIdentifier(loginIdentifier);
+    const user = await this.usersService.findByLoginIdentifier(loginIdentifier);
 
     if (user && user.password && (await bcrypt.compare(pass, user.password))) {
       const { password, otp, otpExpiresAt, ...result } = user;
@@ -256,28 +292,30 @@ export class AuthService {
     return null;
   }
 
-
   /**
-   * Limit concurrent logins to 3 per user. If 4th login, deny and inform user.
-   * On successful login, create a UserSession record.
-   * On logout, you should remove or deactivate the session (not shown here).
+   * Limit concurrent logins to 3 per user.
    */
   async login(user: User) {
-    // Count active sessions for this user
-    const activeSessions = await this.userSessionRepository.count({
-      where: { user: { id: user.id }, active: true },
-    });
-    if (activeSessions >= 3) {
-      throw new ForbiddenException('You are the 4th user to login with this credential. The limit of 3 concurrent logins has been reached.');
+    // Only apply session limit to USER role
+    if (user.role?.name === RoleName.USER) {
+      const activeSessions = await this.userSessionRepository.count({
+        where: { user: { id: user.id }, active: true },
+      });
+      this.logger.log(`User ${user.id} (${user.email}) has ${activeSessions} active sessions.`);
+      if (activeSessions >= 3) {
+        this.logger.warn(`User ${user.id} (${user.email}) exceeded session limit.`);
+        throw new ForbiddenException(
+          'You are the 4th user to login with this credential. The limit of 3 concurrent logins has been reached.',
+        );
+      }
     }
 
-    // Create a new session (optionally, generate a session token)
     const session = this.userSessionRepository.create({
       user,
       active: true,
-      // Optionally, generate a sessionToken here if you want to track sessions for logout
     });
     await this.userSessionRepository.save(session);
+    this.logger.log(`Session created: userId=${user.id}, sessionId=${session.id}`);
 
     const payload = {
       email: user.email,
@@ -294,7 +332,9 @@ export class AuthService {
   async checkDeviceLimit(userId: number): Promise<void> {
     const deviceCount = await this.devicesService.countByUserId(userId);
     if (deviceCount >= 3) {
-      throw new ForbiddenException('Device limit reached. Please log out from another device.');
+      throw new ForbiddenException(
+        'Device limit reached. Please log out from another device.',
+      );
     }
   }
 
@@ -391,7 +431,9 @@ export class AuthService {
     const dataToUpdate: Partial<User> = {};
 
     if (!email && !newPassword) {
-      throw new BadRequestException('At least one field (email or newPassword) must be provided.');
+      throw new BadRequestException(
+        'At least one field (email or newPassword) must be provided.',
+      );
     }
 
     if (newPassword) {

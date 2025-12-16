@@ -9,6 +9,9 @@ import {
   All,
   createParamDecorator,
   ExecutionContext,
+  Get,
+  Query,
+  Res,
 } from '@nestjs/common';
 import { PurchaseService } from './purchase.service';
 import { InitiatePurchaseDto } from './dto/initiate-purchase.dto';
@@ -25,6 +28,7 @@ import { InitiatePurchaseResponseDto } from './dto/initiate-purchase-response.dt
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RoleName } from '../roles/entities/role.entity';
+import type { Response } from 'express';
 
 // Note: To avoid duplication, this should be moved to its own file.
 export const GetUser = createParamDecorator(
@@ -74,6 +78,29 @@ export class PurchaseController {
     @Body() initiatePurchaseDto: InitiatePurchaseDto,
   ): Promise<InitiatePurchaseResponseDto> {
     return this.purchaseService.initiatePurchase(user.id, initiatePurchaseDto);
+  }
+
+  // --- NEW BRIDGE ENDPOINT ---
+  @Get('verify-redirect')
+  @ApiOperation({
+    summary: 'Handle Chapa return, verify transaction, and redirect to App',
+  })
+  async verifyAndRedirect(
+    @Query('tx_ref') tx_ref: string,
+    @Res() res: Response,
+  ) {
+    // 1. Verify the transaction immediately on the server side
+    // This ensures access is granted even if the app fails to load
+    if (tx_ref) {
+      await this.purchaseService.verifyAndGrantAccess({ tx_ref });
+    }
+
+    // 2. Redirect to the Flutter App (Deep Link)
+    // The browser will receive a 302 code and the OS will open the App
+    const flutterReturnUrl =
+      process.env.FLUTTER_RETURN_URL || 'app://alfaruq/purchase-success';
+      
+    return res.redirect(flutterReturnUrl);
   }
 
   // --- WEBHOOK ENDPOINT (MUST REMAIN PUBLIC) ---

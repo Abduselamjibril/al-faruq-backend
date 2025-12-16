@@ -1,4 +1,3 @@
-   
 import {
   Body,
   Controller,
@@ -13,6 +12,7 @@ import {
   HttpCode,
   HttpStatus,
   Delete,
+  BadRequestException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Response } from 'express';
@@ -40,8 +40,7 @@ import {
 import { LoginUserDto } from './dto/login-user.dto';
 import { ChangeAdminCredentialsDto } from './dto/change-admin-credentials.dto';
 import { GoogleMobileLoginDto } from './dto/google-mobile-login.dto';
-import { SetPasswordDto } from './dto/set-password.dto'; // 🟢 IMPORTED
-
+import { SetPasswordDto } from './dto/set-password.dto';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -85,14 +84,35 @@ export class AuthController {
     return this.authService.login(req.user);
   }
 
-  // --- UPDATED ENDPOINT FOR MOBILE GOOGLE LOGIN ---
+  // --- LOGOUT ENDPOINT ---
+  @ApiOperation({ summary: 'Logout and deactivate a session' })
+  @ApiResponse({ status: 200, description: 'Session logged out successfully.' })
+  @ApiResponse({ status: 400, description: 'Invalid session ID.' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'integer', example: 1 },
+      },
+      required: ['sessionId'],
+    },
+  })
+  @HttpCode(HttpStatus.OK)
+  @Post('logout')
+  async logout(@Body() body: { sessionId: number }) {
+    if (!body.sessionId) {
+      throw new BadRequestException('Session ID is required.');
+    }
+    await this.authService.logout(body.sessionId);
+    return { message: 'Logged out successfully.' };
+  }
+
+  // --- MOBILE GOOGLE LOGIN ---
   @ApiOperation({ summary: 'Login with Google ID Token (Mobile)' })
   @ApiResponse({ status: 200, description: 'Login successful, returns JWT.' })
   @ApiResponse({ status: 401, description: 'Invalid Token.' })
   @Post('google-mobile')
   async googleMobileLogin(@Body() loginDto: GoogleMobileLoginDto) {
-    // FIX: Just return the result. DO NOT call this.authService.login() here.
-    // The service already returns { access_token: "..." }
     return this.authService.loginWithGoogleMobile(loginDto.token);
   }
 
@@ -161,7 +181,9 @@ export class AuthController {
     res.redirect(`${frontendUrl}/auth/callback?token=${access_token}`);
   }
 
-  @ApiOperation({ summary: 'Change password for the logged-in user (User Only)' })
+  @ApiOperation({
+    summary: 'Change password for the logged-in user (User Only)',
+  })
   @ApiBearerAuth()
   @ApiResponse({ status: 200, description: 'Password changed successfully.' })
   @ApiResponse({
@@ -181,8 +203,10 @@ export class AuthController {
     return { message: 'Password changed successfully.' };
   }
 
-  // --- 🟢 NEW ENDPOINT FOR SSO USERS ---
-  @ApiOperation({ summary: 'Set password for SSO users who have no password (User Only)' })
+  // --- NEW ENDPOINT FOR SSO USERS ---
+  @ApiOperation({
+    summary: 'Set password for SSO users who have no password (User Only)',
+  })
   @ApiBearerAuth()
   @ApiResponse({ status: 200, description: 'Password set successfully.' })
   @ApiResponse({
@@ -194,16 +218,14 @@ export class AuthController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(RoleName.USER)
   @Patch('set-password')
-  async setPassword(
-    @Request() req,
-    @Body() setPasswordDto: SetPasswordDto,
-  ) {
+  async setPassword(@Request() req, @Body() setPasswordDto: SetPasswordDto) {
     await this.authService.setPassword(req.user.id, setPasswordDto);
     return { message: 'Password set successfully.' };
   }
-  // -------------------------------------
 
-  @ApiOperation({ summary: 'Get the profile of the current logged-in user (User Only)' })
+  @ApiOperation({
+    summary: 'Get the profile of the current logged-in user (User Only)',
+  })
   @ApiBearerAuth()
   @ApiResponse({ status: 200, description: 'Returns the user profile.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
@@ -220,8 +242,13 @@ export class AuthController {
   @Roles(RoleName.USER)
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Delete the account of the current logged-in user (User Only)' })
-  @ApiResponse({ status: 200, description: 'User account successfully deleted.' })
+  @ApiOperation({
+    summary: 'Delete the account of the current logged-in user (User Only)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'User account successfully deleted.',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   @ApiResponse({ status: 403, description: 'Forbidden.' })
   async deleteProfile(@Request() req) {
@@ -246,9 +273,14 @@ export class AuthController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(RoleName.ADMIN)
   @ApiBearerAuth()
-  @ApiOperation({ summary: "Change the current admin's email or password (Admin Only)" })
+  @ApiOperation({
+    summary: "Change the current admin's email or password (Admin Only)",
+  })
   @ApiBody({ type: ChangeAdminCredentialsDto })
-  @ApiResponse({ status: 200, description: 'Admin credentials updated successfully.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Admin credentials updated successfully.',
+  })
   @ApiResponse({ status: 400, description: 'Invalid input data.' })
   @ApiResponse({ status: 403, description: 'Forbidden.' })
   @ApiResponse({ status: 409, description: 'New email is already in use.' })
@@ -256,11 +288,43 @@ export class AuthController {
     @Request() req,
     @Body() changeAdminCredentialsDto: ChangeAdminCredentialsDto,
   ) {
-    return this.authService.changeAdminCredentials(req.user.id, changeAdminCredentialsDto);
+    return this.authService.changeAdminCredentials(
+      req.user.id,
+      changeAdminCredentialsDto,
+    );
   }
 
+  // --- NEW: Force Logout All Sessions for a User ---
+  @ApiOperation({ summary: 'Admin: Force logout all sessions for a user' })
+  @ApiBearerAuth()
+  @ApiResponse({ status: 200, description: 'All sessions cleared for user.' })
+  @ApiResponse({ status: 403, description: 'Forbidden.' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        userId: { type: 'integer', example: 1 },
+      },
+      required: ['userId'],
+    },
+  })
+  @Post('admin/force-logout')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(RoleName.ADMIN)
+  async forceLogoutAll(@Body() body: { userId: number }) {
+    if (!body.userId) {
+      throw new BadRequestException('User ID is required.');
+    }
+    await this.authService.forceLogoutAllSessions(body.userId);
+    return { message: 'All sessions for user have been logged out.' };
+  }
+  // --------------------------------------------------
+
   @ApiOperation({ summary: 'Get a guest token (no credentials required)' })
-  @ApiResponse({ status: 200, description: 'Returns a JWT token for guest access.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns a JWT token for guest access.',
+  })
   @Post('guest-token')
   async guestToken() {
     return this.authService.guestToken();

@@ -136,15 +136,23 @@ export class PurchaseService {
     const tx_ref = `tx-${randomBytes(16).toString('hex')}`;
     this.logger.debug(`[initiatePurchase] Generated tx_ref: ${tx_ref}`);
 
-    // --- [CHANGE 1 START] ---
-    // Refine the split calculation to be cleaner and create the splits object
+    // Create splits object
     const transactionCharge = this.skylinkSplitPercentage / 100;
     const splits = {
       subaccount: this.skylinkSubaccountId,
       transaction_charge_type: 'percentage',
       transaction_charge: transactionCharge,
     };
-    
+
+    // Construct the HTTPS Return URL (The Bridge)
+    // This points to the new verify-redirect endpoint we made in the Controller
+    // NOTE: Added /api/ assuming your global prefix is 'api'.
+    const httpsReturnUrl = `${this.apiDomain}/api/purchase/verify-redirect?tx_ref=${tx_ref}`;
+
+    // Construct Webhook URL
+    // NOTE: Added /api/ to match your screenshot configuration
+    const webhookUrl = `${this.apiDomain}/api/purchase/chapa-webhook`;
+
     const chapaRequestBody: any = {
       amount: price.toString(),
       currency: 'ETB',
@@ -152,13 +160,12 @@ export class PurchaseService {
       first_name: user.firstName || '',
       last_name: user.lastName || '',
       tx_ref: tx_ref,
-      callback_url: `${this.apiDomain}/purchase/chapa-webhook`,
-      return_url: this.flutterReturnUrl,
+      callback_url: webhookUrl,
+      return_url: httpsReturnUrl, // Use the HTTPS URL, not the app:// URL
       'customization[title]': 'Al-Faruq Content Purchase',
       'customization[description]': `Payment for ${content.title}`,
-      splits: splits, // Add the cleanly created splits object
+      splits: splits,
     };
-    // --- [CHANGE 1 END] ---
 
     this.logger.log(`[initiatePurchase] Preparing to send request to Chapa for tx_ref: ${tx_ref}`);
     this.logger.debug(`[initiatePurchase] Chapa Request Body: ${JSON.stringify(chapaRequestBody, null, 2)}`);
@@ -259,11 +266,8 @@ export class PurchaseService {
         ),
       );
         
-      // --- [CHANGE 2 START] ---
-      // Add a detailed log of the verification response data. This might contain clues.
       this.logger.log(`[verifyAndGrantAccess] Full verification data for tx_ref ${tx_ref}:`);
       this.logger.log(JSON.stringify(verificationResponse.data, null, 2));
-      // --- [CHANGE 2 END] ---
 
       if (verificationResponse.data.status !== 'success') {
         this.logger.error(`[verifyAndGrantAccess] Chapa verification FAILED for tx_ref: ${tx_ref}`);
