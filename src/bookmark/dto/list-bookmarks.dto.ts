@@ -1,16 +1,17 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsEnum, IsInt, IsOptional, Min } from 'class-validator';
+import { ContentType } from '../../content/entities/content.entity';
 import type { BookmarkType } from '../entities/bookmark.entity';
 
 export class ListBookmarksDto {
   @ApiPropertyOptional({
-    enum: ['content', 'reciter', 'tafsir'],
-    description: 'Filter by bookmark type',
+    enum: [...Object.values(ContentType), 'reciter', 'tafsir'],
+    description: 'Filter by bookmark type (ContentType, reciter, or tafsir)',
     enumName: 'BookmarkType',
   })
   @IsOptional()
-  @IsEnum(['content', 'reciter', 'tafsir'])
+  @IsEnum([...Object.values(ContentType), 'reciter', 'tafsir'])
   type?: BookmarkType;
 
   @ApiPropertyOptional({ default: 1, description: 'Page number' })
