@@ -139,27 +139,34 @@ export class FeedService {
     contentId: string,
     userId: number,
   ): Promise<Content> {
-    // --- [REMOVED] The joins to the old 'audioTracks' table. ---
-    const content = await this.contentRepository
-      .createQueryBuilder('content')
-      .leftJoinAndSelect('content.pricingTier', 'pricingTier')
-      .where('content.id = :id', { id: contentId })
-      .getOne();
+    // Deep join: content -> children (seasons) -> children (episodes)
+    let content: Content | undefined;
+    if (
+      contentId &&
+      (await this.contentRepository.findOne({ where: { id: contentId } })).type === ContentType.SERIES ||
+      (await this.contentRepository.findOne({ where: { id: contentId } })).type === ContentType.PROPHET_HISTORY
+    ) {
+      content = await this.contentRepository
+        .createQueryBuilder('content')
+        .leftJoinAndSelect('content.children', 'seasonsOrEpisodes')
+        .leftJoinAndSelect('seasonsOrEpisodes.children', 'episodes')
+        .leftJoinAndSelect('content.pricingTier', 'pricingTier')
+        .where('content.id = :id', { id: contentId })
+        .orderBy({
+          'seasonsOrEpisodes.createdAt': 'ASC',
+          'episodes.createdAt': 'ASC',
+        })
+        .getOne();
+    } else {
+      content = await this.contentRepository
+        .createQueryBuilder('content')
+        .leftJoinAndSelect('content.pricingTier', 'pricingTier')
+        .where('content.id = :id', { id: contentId })
+        .getOne();
+    }
 
     if (!content) {
       throw new NotFoundException(`Content with ID ${contentId} not found.`);
-    }
-
-    // --- [REMOVED] The specific logic block for the old 'QURAN_TAFSIR' type. ---
-
-    if (
-      content.type === ContentType.SERIES ||
-      content.type === ContentType.PROPHET_HISTORY
-    ) {
-      content.children = await this.contentRepository.find({
-        where: { parentId: content.id },
-        order: { createdAt: 'ASC' },
-      });
     }
 
     if (!content.isLocked) {
