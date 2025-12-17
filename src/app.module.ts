@@ -28,6 +28,7 @@ import { LanguageModule } from './language/language.module';
 import { ReportsModule } from './reports/reports.module';
 import { NewsModule } from './news/news.module';
 import { QuranModule } from './quran/quran.module'; // --- [NEW] IMPORT QURAN MODULE ---
+import { BookmarkModule } from './bookmark/bookmark.module'; // --- [NEW] IMPORT BOOKMARK MODULE ---
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { QuranModule } from './quran/quran.module'; // --- [NEW] IMPORT QURAN MO
     UploadModule,
     UsersModule,
     YoutubeModule,
+    BookmarkModule, // --- [NEW] ADD BOOKMARK MODULE HERE ---
   ],
   controllers: [AppController],
   providers: [AppService],

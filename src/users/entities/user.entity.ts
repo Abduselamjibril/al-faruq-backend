@@ -12,6 +12,7 @@ import { Role } from '../../roles/entities/role.entity';
 import { Device } from '../../devices/entities/device.entity';
 import { UserNotificationStatus } from '../../notifications/entities/user-notification-status.entity';
 import { UserSession } from '../../auth/entities/user-session.entity';
+import { Bookmark } from '../../bookmark/entities/bookmark.entity';
 
 export enum AuthProvider {
   LOCAL = 'LOCAL',
@@ -90,4 +91,8 @@ export class User {
     (status) => status.user,
   )
   notificationStatuses: UserNotificationStatus[];
+
+    // User bookmarks relation
+    @OneToMany(() => Bookmark, (bookmark: Bookmark) => bookmark.user)
+    bookmarks: Bookmark[];
 }
