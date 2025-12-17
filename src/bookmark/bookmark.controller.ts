@@ -1,4 +1,5 @@
 import { Controller, Post, Delete, Get, Body, UseGuards, Request, Query } from '@nestjs/common';
+import { ApiBearerAuth } from '@nestjs/swagger';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { RoleName } from '../roles/entities/role.entity';
@@ -7,6 +8,7 @@ import { AddBookmarkDto, RemoveBookmarkDto } from './dto/bookmark.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ListBookmarksDto } from './dto/list-bookmarks.dto';
 
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('bookmarks')
 export class BookmarkController {
