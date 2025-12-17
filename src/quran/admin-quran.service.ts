@@ -1,3 +1,9 @@
+  async findAllTafsirs(): Promise<Tafsir[]> {
+    return this.tafsirRepository.find({
+      relations: ['surah', 'surah.juz', 'reciter', 'language'],
+      order: { id: 'DESC' },
+    });
+  }
 // src/quran/admin-quran.service.ts
 
 import { Injectable, NotFoundException } from '@nestjs/common';

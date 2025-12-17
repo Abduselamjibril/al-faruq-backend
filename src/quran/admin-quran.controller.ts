@@ -65,6 +65,13 @@ export class AdminQuranController {
     return this.adminQuranService.createTafsir(createTafsirDto);
   }
 
+
+  @Get('tafsirs')
+  @ApiOperation({ summary: 'Get a list of all tafsir entries' })
+  findAllTafsirs() {
+    return this.adminQuranService.findAllTafsirs();
+  }
+
   @Patch('tafsirs/:id')
   @ApiOperation({ summary: 'Update a tafsir audio entry' })
   updateTafsir(
