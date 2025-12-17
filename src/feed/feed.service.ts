@@ -140,12 +140,13 @@ export class FeedService {
     userId: number,
   ): Promise<Content> {
     // Deep join: content -> children (seasons) -> children (episodes)
+
     let content: Content | undefined;
-    if (
-      contentId &&
-      (await this.contentRepository.findOne({ where: { id: contentId } })).type === ContentType.SERIES ||
-      (await this.contentRepository.findOne({ where: { id: contentId } })).type === ContentType.PROPHET_HISTORY
-    ) {
+    const found = await this.contentRepository.findOne({ where: { id: contentId } });
+    if (!found) {
+      throw new NotFoundException(`Content with ID ${contentId} not found.`);
+    }
+    if (found.type === ContentType.SERIES || found.type === ContentType.PROPHET_HISTORY) {
       content = await this.contentRepository
         .createQueryBuilder('content')
         .leftJoinAndSelect('content.children', 'seasonsOrEpisodes')
@@ -156,15 +157,14 @@ export class FeedService {
           'seasonsOrEpisodes.createdAt': 'ASC',
           'episodes.createdAt': 'ASC',
         })
-        .getOne();
+        .getOne() || undefined;
     } else {
       content = await this.contentRepository
         .createQueryBuilder('content')
         .leftJoinAndSelect('content.pricingTier', 'pricingTier')
         .where('content.id = :id', { id: contentId })
-        .getOne();
+        .getOne() || undefined;
     }
-
     if (!content) {
       throw new NotFoundException(`Content with ID ${contentId} not found.`);
     }
