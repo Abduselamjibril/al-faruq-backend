@@ -1,15 +1,3 @@
-// ...existing code...
-
-@Injectable()
-export class AdminQuranService {
-  // ...existing code...
-
-  async findAllTafsirs(): Promise<Tafsir[]> {
-    return this.tafsirRepository.find({
-      relations: ['surah', 'surah.juz', 'reciter', 'language'],
-      order: { id: 'DESC' },
-    });
-  }
 // src/quran/admin-quran.service.ts
 
 import { Injectable, NotFoundException } from '@nestjs/common';
@@ -62,6 +50,14 @@ export class AdminQuranService {
   }
 
   // --- Tafsir Management ---
+  
+  async findAllTafsirs(): Promise<Tafsir[]> {
+    return this.tafsirRepository.find({
+      relations: ['surah', 'surah.juz', 'reciter', 'language'],
+      order: { id: 'DESC' },
+    });
+  }
+
   async createTafsir(createTafsirDto: CreateTafsirDto): Promise<Tafsir> {
     const tafsir = this.tafsirRepository.create(createTafsirDto);
     const savedTafsir = await this.tafsirRepository.save(tafsir);
