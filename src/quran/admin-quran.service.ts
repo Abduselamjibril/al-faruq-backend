@@ -1,3 +1,9 @@
+// ...existing code...
+
+@Injectable()
+export class AdminQuranService {
+  // ...existing code...
+
   async findAllTafsirs(): Promise<Tafsir[]> {
     return this.tafsirRepository.find({
       relations: ['surah', 'surah.juz', 'reciter', 'language'],
