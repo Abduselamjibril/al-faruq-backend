@@ -1,14 +1,15 @@
 import { IsEnum, IsNotEmpty, IsString } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { ContentType } from '../../content/entities/content.entity';
 import type { BookmarkType } from '../entities/bookmark.entity';
 
 export class AddBookmarkDto {
   @ApiProperty({
-    enum: ['content', 'reciter', 'tafsir'],
-    example: 'content',
-    description: 'Type of the item to bookmark',
+    enum: [...Object.values(ContentType), 'reciter', 'tafsir'],
+    example: 'SERIES',
+    description: 'Type of the item to bookmark (ContentType, reciter, or tafsir)',
   })
-  @IsEnum(['content', 'reciter', 'tafsir'])
+  @IsEnum([...Object.values(ContentType), 'reciter', 'tafsir'])
   type: BookmarkType;
 
   @ApiProperty({
@@ -22,11 +23,11 @@ export class AddBookmarkDto {
 
 export class RemoveBookmarkDto {
   @ApiProperty({
-    enum: ['content', 'reciter', 'tafsir'],
-    example: 'content',
-    description: 'Type of the item to remove from bookmarks',
+    enum: [...Object.values(ContentType), 'reciter', 'tafsir'],
+    example: 'SERIES',
+    description: 'Type of the item to remove from bookmarks (ContentType, reciter, or tafsir)',
   })
-  @IsEnum(['content', 'reciter', 'tafsir'])
+  @IsEnum([...Object.values(ContentType), 'reciter', 'tafsir'])
   type: BookmarkType;
 
   @ApiProperty({
