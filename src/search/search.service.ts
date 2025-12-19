@@ -67,7 +67,7 @@ export class SearchService {
           newsResults,
           quranResults, // --- [NEW] Add quran to the 'ALL' search ---
         ] = await Promise.all([
-          this.youtubeService.searchYouTube(query),
+          this.youtubeService.searchCachedPlaylist(query),
           this.contentService.searchTopLevelContent(query),
           this.contentService.searchEpisodes(query),
           this.newsService.search(query),
@@ -78,7 +78,7 @@ export class SearchService {
         results.news = newsResults;
         results.quran = quranResults;
       } else if (type === SearchType.YOUTUBE) {
-        results.youtube = await this.youtubeService.searchYouTube(query);
+        results.youtube = await this.youtubeService.searchCachedPlaylist(query);
       } else if (type === SearchType.NEWS) {
         results.news = await this.newsService.search(query);
       } else if (type === SearchType.QURAN) {

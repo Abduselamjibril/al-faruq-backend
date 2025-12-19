@@ -98,6 +98,30 @@ export class YoutubeService {
   }
 
   /**
+   * Searches only within the cached playlist videos instead of the global YouTube API.
+   * Useful when we want to limit results to our owned channels.
+   */
+  async searchCachedPlaylist(
+    query: string,
+    status?: VideoStatus,
+    channel?: string,
+  ): Promise<YouTubeSearchResultDto[]> {
+    const normalizedQuery = query.trim().toLowerCase();
+
+    // Ensure we are using the cached playlist (or refresh if empty)
+    const videos = await this.getPlaylistVideos(status, channel);
+
+    const filtered = !normalizedQuery
+      ? videos
+      : videos.filter((video) => {
+          const haystack = `${video.title} ${video.description} ${video.channelTitle}`.toLowerCase();
+          return haystack.includes(normalizedQuery);
+        });
+
+    return filtered.map((video) => this._mapPlaylistItemToSearchResult(video));
+  }
+
+  /**
    * This is a scheduled task that runs automatically every day at midnight.
    * It refreshes the YouTube playlist cache to ensure the data is up-to-date.
    */
@@ -285,5 +309,18 @@ export class YoutubeService {
         return null;
       })
       .filter((item): item is PlaylistItemDto => item !== null);
+  }
+
+  private _mapPlaylistItemToSearchResult(
+    item: PlaylistItemDto,
+  ): YouTubeSearchResultDto {
+    return {
+      videoId: item.videoId,
+      title: item.title,
+      description: item.description,
+      thumbnailUrl: item.thumbnailUrl,
+      channelTitle: item.channelTitle,
+      publishedAt: item.publishedAt,
+    };
   }
 }
