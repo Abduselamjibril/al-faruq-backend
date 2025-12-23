@@ -54,38 +54,57 @@ export class CreateContentDto {
 
 
   @ApiProperty({
-    description: 'The URL of the main video file (for MOVIE, EPISODE, etc.).',
+    description:
+      'Primary video file URL (required for playable types unless youtubeUrl is provided).',
     example: 'https://cdn.example.com/videos/inception.mp4',
     required: false,
   })
-  @ValidateIf((o) =>
-    [
-      ContentType.MOVIE,
-      ContentType.MUSIC_VIDEO,
-      ContentType.EPISODE,
-      ContentType.DAWAH,
-      ContentType.DOCUMENTARY,
-    ].includes(o.type),
+  @ValidateIf(
+    (o) =>
+      [
+        ContentType.MOVIE,
+        ContentType.MUSIC_VIDEO,
+        ContentType.EPISODE,
+        ContentType.DAWAH,
+        ContentType.DOCUMENTARY,
+        ContentType.PROPHET_HISTORY_EPISODE,
+      ].includes(o.type) && !o.youtubeUrl,
   )
   @IsUrl()
   @IsNotEmpty()
   videoUrl?: string;
 
   @ApiProperty({
-    description: 'Optional YouTube video or audio URL for this content.',
+    description:
+      'YouTube video or audio URL (required for playable types unless videoUrl is provided).',
     example: 'https://www.youtube.com/watch?v=abc123',
     required: false,
   })
+  @ValidateIf(
+    (o) =>
+      [
+        ContentType.MOVIE,
+        ContentType.MUSIC_VIDEO,
+        ContentType.EPISODE,
+        ContentType.DAWAH,
+        ContentType.DOCUMENTARY,
+        ContentType.PROPHET_HISTORY_EPISODE,
+      ].includes(o.type) && !o.videoUrl,
+  )
   @IsUrl()
+  @IsNotEmpty()
   @IsOptional()
   youtubeUrl?: string;
 
   @ApiProperty({
-    description: 'The URL of the main audio file (for PROPHET_HISTORY_EPISODE or BOOK).',
+    description:
+      'Main audio file URL (required for PROPHET_HISTORY_EPISODE unless youtubeUrl is provided; optional for BOOK).',
     example: 'https://cdn.example.com/audio/prophet-history-ep1.mp3',
     required: false,
   })
-  @ValidateIf((o) => o.type === ContentType.PROPHET_HISTORY_EPISODE)
+  @ValidateIf(
+    (o) => o.type === ContentType.PROPHET_HISTORY_EPISODE && !o.youtubeUrl,
+  )
   @IsUrl()
   @IsNotEmpty()
   @IsOptional() // Keep it optional for books
