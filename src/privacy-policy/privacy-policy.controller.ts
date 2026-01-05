@@ -39,7 +39,7 @@ import { User } from '../users/entities/user.entity';
 import type { Express } from 'express';
 import { AcceptPrivacyPolicyDto } from './dto/accept-privacy-policy.dto';
 import { Public } from '../auth/decorators/public.decorator';
-import { PaginationQueryDto } from '../utils/pagination-query.dto'; // --- [NEW] IMPORT ---
+import { PaginationQueryDto } from '../utils/pagination-query.dto';
 
 @ApiTags('Privacy Policy')
 @ApiBearerAuth()
@@ -95,12 +95,19 @@ export class PrivacyPolicyController {
     schema: {
       type: 'object',
       properties: {
-        title: { type: 'string' },
-        version: { type: 'string' },
-        description: { type: 'string' },
-        effectiveDate: { type: 'string', format: 'date-time' },
-        isActive: { type: 'boolean' },
-        isMandatory: { type: 'boolean' },
+        title: { type: 'string', example: 'Privacy Policy Q3 2024' },
+        version: { type: 'string', example: '1.1.0' },
+        description: {
+          type: 'string',
+          example: 'Added clauses for new analytics features.',
+        },
+        effectiveDate: {
+          type: 'string',
+          format: 'date-time',
+          example: '2024-10-01T00:00:00.000Z',
+        },
+        isActive: { type: 'boolean', example: true },
+        isMandatory: { type: 'boolean', example: true },
         file: {
           type: 'string',
           format: 'binary',
@@ -142,7 +149,6 @@ export class PrivacyPolicyController {
     return this.privacyPolicyService.findAllForAdmin();
   }
 
-  // --- [NEW] ADMIN AUDIT ENDPOINT ---
   @Get('admin/:id/acceptances')
   @Roles(RoleName.ADMIN)
   @ApiOperation({ summary: "Admin: Get a paginated list of a policy's acceptances" })
