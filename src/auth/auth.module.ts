@@ -1,3 +1,5 @@
+// src/auth/auth.module.ts
+
 import { Module } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
@@ -11,10 +13,10 @@ import { MailModule } from '../mail/mail.module';
 import { RolesModule } from '../roles/roles.module';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { FacebookStrategy } from './strategies/facebook.strategy';
-
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserSession } from './entities/user-session.entity';
 import { DevicesModule } from '../devices/devices.module';
+import { PrivacyPolicyModule } from '../privacy-policy/privacy-policy.module'; // --- [NEW] IMPORT ---
 
 @Module({
   imports: [
@@ -24,6 +26,7 @@ import { DevicesModule } from '../devices/devices.module';
     MailModule,
     RolesModule,
     DevicesModule,
+    PrivacyPolicyModule, // --- [NEW] ADD MODULE HERE ---
     TypeOrmModule.forFeature([UserSession]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -33,7 +36,9 @@ import { DevicesModule } from '../devices/devices.module';
         const jwtExpiresInRaw = configService.get<string>('JWT_EXPIRES_IN');
 
         if (!jwtSecret || !jwtExpiresInRaw) {
-          throw new Error('JWT configuration (JWT_SECRET or JWT_EXPIRES_IN) is missing in .env file.');
+          throw new Error(
+            'JWT configuration (JWT_SECRET or JWT_EXPIRES_IN) is missing in .env file.',
+          );
         }
 
         // Logic: Check if the value is purely numeric (e.g. "3600").
@@ -46,7 +51,7 @@ import { DevicesModule } from '../devices/devices.module';
         return {
           secret: jwtSecret,
           signOptions: {
-            // UPDATED: Cast to 'any' to fix the TypeScript mismatch 
+            // UPDATED: Cast to 'any' to fix the TypeScript mismatch
             // between generic 'string' and the library's 'StringValue' type.
             expiresIn: expiresIn as any,
           },

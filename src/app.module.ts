@@ -29,7 +29,8 @@ import { ReportsModule } from './reports/reports.module';
 import { NewsModule } from './news/news.module';
 import { QuranModule } from './quran/quran.module';
 import { BookmarkModule } from './bookmark/bookmark.module';
-import { EntitlementModule } from './entitlement/entitlement.module'; // --- [NEW] IMPORT ENTITLEMENT MODULE ---
+import { EntitlementModule } from './entitlement/entitlement.module';
+import { PrivacyPolicyModule } from './privacy-policy/privacy-policy.module'; // --- [NEW] IMPORT PRIVACY POLICY MODULE ---
 
 @Module({
   imports: [
@@ -55,13 +56,14 @@ import { EntitlementModule } from './entitlement/entitlement.module'; // --- [NE
     BookmarkModule,
     ContentModule,
     DevicesModule,
-    EntitlementModule, // --- [NEW] ADD THE ENTITLEMENT MODULE HERE ---
+    EntitlementModule,
     FeedModule,
     FirebaseModule,
     LanguageModule,
     MailModule,
     NewsModule,
     NotificationsModule,
+    PrivacyPolicyModule, // --- [NEW] ADD THE PRIVACY POLICY MODULE HERE ---
     PurchaseModule,
     QuranModule,
     RemindersModule,

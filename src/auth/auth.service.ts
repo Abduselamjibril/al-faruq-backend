@@ -1,3 +1,5 @@
+// src/auth/auth.service.ts
+
 import {
   BadRequestException,
   ConflictException,
@@ -25,6 +27,7 @@ import { RoleName } from '../roles/entities/role.entity';
 import { ChangeAdminCredentialsDto } from './dto/change-admin-credentials.dto';
 import { DevicesService } from '../devices/devices.service';
 import { SetPasswordDto } from './dto/set-password.dto';
+import { PrivacyPolicyService } from '../privacy-policy/privacy-policy.service'; // --- [NEW] IMPORT ---
 
 export interface SocialProfile {
   provider: 'google' | 'facebook';
@@ -46,6 +49,7 @@ export class AuthService {
     private rolesService: RolesService,
     private devicesService: DevicesService,
     private configService: ConfigService,
+    private readonly privacyPolicyService: PrivacyPolicyService, // --- [NEW] INJECT ---
     @InjectRepository(UserSession)
     private userSessionRepository: Repository<UserSession>,
   ) {
@@ -87,7 +91,6 @@ export class AuthService {
     try {
       const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID') || '';
 
-      // 1. Verify the ID Token with Google
       this.logger.debug('Verifying ID Token with Google...');
       const ticket = await this.googleClient.verifyIdToken({
         idToken: token,
@@ -104,7 +107,6 @@ export class AuthService {
         `Token verified. Email: ${payload.email}, Verified: ${payload.email_verified}`,
       );
 
-      // --- SECURITY UPDATE: Check if email is verified ---
       if (!payload.email_verified) {
         this.logger.warn(
           `Login blocked: Email ${payload.email} is not verified by Google.`,
@@ -114,7 +116,6 @@ export class AuthService {
         );
       }
 
-      // 2. Construct the SocialProfile object
       const socialProfile: SocialProfile = {
         provider: 'google',
         providerId: payload.sub,
@@ -123,17 +124,15 @@ export class AuthService {
         lastName: payload.family_name || '',
       };
 
-      // 3. Find or Create the user
       this.logger.log('Validating/Creating user from Social Profile...');
       const user = await this.validateSocialLogin(socialProfile);
       this.logger.log(`User processed successfully. ID: ${user.id}`);
 
-      // 4. Check device limits
       this.logger.debug(`Checking device limits for User ID: ${user.id}`);
       await this.checkDeviceLimit(user.id);
 
-      // 5. Generate JWT Token
       this.logger.log('Generating JWT token...');
+      // --- [MODIFIED] Return the result of the login method ---
       return this.login(user);
     } catch (error) {
       if (error instanceof BadRequestException) {
@@ -210,7 +209,6 @@ export class AuthService {
   async guestToken() {
     let guestUser = await this.usersService.findByEmail('guest@guest.local');
 
-    // Always ensure guest user has GUEST role
     const guestRole = await this.rolesService.findByName(RoleName.GUEST);
     if (!guestRole) {
       this.logger.error('Guest role not found.');
@@ -229,7 +227,6 @@ export class AuthService {
       });
       this.logger.log('Created new guest user.');
     } else if (guestUser.role?.name !== RoleName.GUEST) {
-      // Update role if not GUEST
       guestUser = await this.usersService.update(guestUser.id, { role: guestRole });
       this.logger.log('Updated guest user to GUEST role.');
     }
@@ -310,6 +307,17 @@ export class AuthService {
       }
     }
 
+    // --- [NEW] PRIVACY POLICY CHECK ---
+    const mandatoryPolicy = await this.privacyPolicyService.getCurrentMandatoryPolicy();
+    let requiresAcceptance = false;
+    if (mandatoryPolicy && user.role?.name !== RoleName.ADMIN) { // Admins bypass the check
+      requiresAcceptance = !(await this.privacyPolicyService.hasUserAcceptedPolicy(
+        user.id,
+        mandatoryPolicy.id,
+      ));
+    }
+    // --- [END OF NEW] ---
+
     const session = this.userSessionRepository.create({
       user,
       active: true,
@@ -322,10 +330,17 @@ export class AuthService {
       sub: user.id,
       role: user.role.name,
     };
+
+    // --- [MODIFIED] DYNAMIC LOGIN RESPONSE ---
     return {
       access_token: this.jwtService.sign(payload),
       message: 'Login successful',
       sessionId: session.id,
+      policyAcceptance: {
+        isRequired: requiresAcceptance,
+        // If required, send policy details to the client
+        policy: requiresAcceptance ? mandatoryPolicy : undefined,
+      },
     };
   }
 
