@@ -16,7 +16,7 @@ import {
 import { ContentService } from './content.service';
 import { CreateContentDto } from './dto/create-content.dto';
 import { UpdateContentDto } from './dto/update-content.dto';
-import { CreatePricingDto } from './dto/create-pricing.dto';
+import { SetPricingDto } from './dto/set-pricing.dto'; // --- [CHANGED] Import new DTO ---
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -29,7 +29,6 @@ import {
   ApiBody,
 } from '@nestjs/swagger';
 import { Content } from './entities/content.entity';
-// --- [REMOVED] Imports for old AudioTrack DTOs and entities. ---
 
 @ApiTags('Content Management (Admin)')
 @ApiBearerAuth()
@@ -39,11 +38,20 @@ import { Content } from './entities/content.entity';
 export class ContentController {
   constructor(private readonly contentService: ContentService) {}
 
-  @ApiOperation({ summary: 'Create a new content item (movie, series, book, etc.)' })
+  @ApiOperation({
+    summary: 'Create a new content item (movie, series, book, etc.)',
+  })
   @ApiBody({ type: CreateContentDto })
-  @ApiResponse({ status: 201, description: 'Content successfully created.', type: Content })
+  @ApiResponse({
+    status: 201,
+    description: 'Content successfully created.',
+    type: Content,
+  })
   @ApiResponse({ status: 400, description: 'Invalid input data.' })
-  @ApiResponse({ status: 404, description: 'Parent content not found if parentId is provided.' })
+  @ApiResponse({
+    status: 404,
+    description: 'Parent content not found if parentId is provided.',
+  })
   @Post()
   create(@Body() createContentDto: CreateContentDto) {
     return this.contentService.create(createContentDto);
@@ -63,10 +71,14 @@ export class ContentController {
   @ApiOperation({ summary: 'Get a single content item with its full hierarchy' })
   @ApiResponse({
     status: 200,
-    description: 'Returns the content item with its children (e.g., seasons/episodes).',
+    description:
+      'Returns the content item with its children (e.g., seasons/episodes).',
     type: Content,
   })
-  @ApiResponse({ status: 404, description: 'Content with the specified ID not found.' })
+  @ApiResponse({
+    status: 404,
+    description: 'Content with the specified ID not found.',
+  })
   @Get(':id')
   findOneWithHierarchy(@Param('id', ParseUUIDPipe) id: string) {
     return this.contentService.findOneWithHierarchy(id);
@@ -74,8 +86,15 @@ export class ContentController {
 
   @ApiOperation({ summary: 'Update a content item' })
   @ApiBody({ type: UpdateContentDto })
-  @ApiResponse({ status: 200, description: 'Content successfully updated.', type: Content })
-  @ApiResponse({ status: 404, description: 'Content with the specified ID not found.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Content successfully updated.',
+    type: Content,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Content with the specified ID not found.',
+  })
   @Patch(':id')
   update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -86,33 +105,35 @@ export class ContentController {
 
   @ApiOperation({ summary: 'Delete a content item and all its children' })
   @ApiResponse({ status: 200, description: 'Content successfully deleted.' })
-  @ApiResponse({ status: 404, description: 'Content with the specified ID not found.' })
+  @ApiResponse({
+    status: 404,
+    description: 'Content with the specified ID not found.',
+  })
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.contentService.remove(id);
   }
 
-  // --- [REMOVED] All endpoints related to old AudioTrack management are deleted. ---
-
-  @ApiOperation({ summary: 'Lock a content item and set its pricing' })
-  @ApiBody({ type: CreatePricingDto })
-  @ApiResponse({ status: 201, description: 'Content successfully locked and pricing set.', type: Content })
-  @ApiResponse({ status: 404, description: 'Content with the specified ID not found.' })
-  @Post(':id/lock')
-  lockContent(
+  // --- [REFACTORED] lockContent is now set-pricing ---
+  @ApiOperation({ summary: 'Set the price for a single content item' })
+  @ApiBody({ type: SetPricingDto })
+  @ApiResponse({
+    status: 201,
+    description: 'Content successfully marked as locked and pricing set.',
+    type: Content,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Content with the specified ID not found.',
+  })
+  @Post(':id/set-pricing')
+  setPricing(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() createPricingDto: CreatePricingDto,
+    @Body() setPricingDto: SetPricingDto,
   ) {
-    return this.contentService.lockContent(id, createPricingDto);
+    return this.contentService.setPricing(id, setPricingDto);
   }
 
-  @ApiOperation({ summary: 'Unlock a content item' })
-  @ApiResponse({ status: 200, description: 'Content successfully unlocked.', type: Content })
-  @ApiResponse({ status: 404, description: 'Content with the specified ID not found.' })
-  @Patch(':id/unlock')
-  @HttpCode(HttpStatus.OK)
-  unlockContent(@Param('id', ParseUUIDPipe) id: string) {
-    return this.contentService.unlockContent(id);
-  }
+  // --- [REMOVED] The unlockContent endpoint is now obsolete. ---
 }

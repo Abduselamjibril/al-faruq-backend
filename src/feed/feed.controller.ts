@@ -24,6 +24,8 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { Content } from '../content/entities/content.entity';
 import { FeedQueryDto } from './dto/feed-query.dto';
 import { PaginationResponseDto } from '../utils/pagination.dto';
+import { AccessStatusDto } from './dto/access-status.dto';
+import { FeedAccessService } from './feed-access.service';
 
 // To avoid duplication, this decorator should be in its own file (e.g., src/auth/decorators/get-user.decorator.ts)
 export const GetUser = createParamDecorator(
@@ -36,25 +38,26 @@ export const GetUser = createParamDecorator(
 @ApiTags('Feed (User-Facing)')
 @Controller('feed')
 export class FeedController {
-  constructor(private readonly feedService: FeedService) {}
-
-  // --- [REMOVED] The old @Public @Get('tafsir') endpoint is deleted. ---
+  // --- [CHANGED] We now inject two services for better separation of concerns ---
+  constructor(
+    private readonly feedService: FeedService,
+    private readonly feedAccessService: FeedAccessService,
+  ) {}
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(RoleName.USER, RoleName.GUEST)
   @Get()
   @ApiOperation({
-    summary: "Get the paginated and filterable main content feed for the user's home screen (User Only)",
+    summary:
+      "Get the paginated and filterable main content feed for the user's home screen",
   })
   @ApiResponse({
     status: 200,
-    description: 'Returns a paginated and personalized list of top-level content items.',
+    description:
+      'Returns a paginated and personalized list of top-level content items.',
     type: PaginationResponseDto,
   })
-  @ApiResponse({ status: 400, description: 'Invalid query parameters.' })
-  @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  @ApiResponse({ status: 403, description: 'Forbidden.' })
   getFeed(
     @GetUser() user: { id: number },
     @Query() query: FeedQueryDto,
@@ -62,41 +65,62 @@ export class FeedController {
     return this.feedService.getFeed(user.id, query);
   }
 
+  // --- [RENAMED] my-purchases is now my-content ---
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(RoleName.USER)
-  @Get('my-purchases')
+  @Get('my-content')
   @ApiOperation({
-    summary: "Get all content the user has actively rented/purchased, with pagination and filtering (User Only)",
+    summary:
+      'Get all content the user is entitled to, with pagination and filtering',
   })
   @ApiResponse({
     status: 200,
-    description: 'Returns a paginated list of content items for which the user has an active rental.',
+    description:
+      'Returns a paginated list of content items for which the user has an active entitlement.',
     type: PaginationResponseDto,
   })
-  @ApiResponse({ status: 400, description: 'Invalid query parameters.' })
-  @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  @ApiResponse({ status: 403, description: 'Forbidden.' })
-  getMyPurchases(
+  getMyContent(
     @GetUser() user: { id: number },
     @Query() query: FeedQueryDto,
   ): Promise<PaginationResponseDto<Content>> {
-    return this.feedService.getMyPurchases(user.id, query);
+    return this.feedService.getMyContent(user.id, query);
+  }
+
+  // --- [NEW] CRITICAL API FOR UI ---
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(RoleName.USER, RoleName.GUEST)
+  @Get(':id/access')
+  @ApiOperation({
+    summary:
+      "Check the user's access status for a specific content item (e.g., episode)",
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Returns the access status, which determines if the UI shows WATCH or UNLOCK.',
+    type: AccessStatusDto,
+  })
+  getAccessStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @GetUser() user: { id: number },
+  ): Promise<AccessStatusDto> {
+    return this.feedAccessService.getAccessStatus(id, user.id);
   }
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(RoleName.USER, RoleName.GUEST)
   @Get(':id')
-  @ApiOperation({ summary: 'Get detailed information for a specific content item (User Only)' })
+  @ApiOperation({
+    summary: 'Get detailed information for a specific content item',
+  })
   @ApiResponse({
     status: 200,
     description: 'Returns the full content hierarchy.',
     type: Content,
   })
-  @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  @ApiResponse({ status: 403, description: 'Forbidden.' })
-  @ApiResponse({ status: 404, description: 'Content with the specified ID not found.' })
   getContent(
     @Param('id', ParseUUIDPipe) id: string,
     @GetUser() user: { id: number },

@@ -13,7 +13,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { PricingTier } from '../../pricing/entities/pricing-tier.entity';
+// --- [REMOVED] The 'PricingTier' import is no longer needed. ---
 import { Purchase } from '../../purchase/entities/purchase.entity';
 
 export enum ContentType {
@@ -22,7 +22,6 @@ export enum ContentType {
   SERIES = 'SERIES',
   SEASON = 'SEASON',
   EPISODE = 'EPISODE',
-  // --- [REMOVED] The old 'QURAN_TAFSIR' type is now fully deprecated. ---
   DAWAH = 'DAWAH',
   DOCUMENTARY = 'DOCUMENTARY',
   PROPHET_HISTORY = 'PROPHET_HISTORY',
@@ -44,11 +43,9 @@ export class Content extends BaseEntity {
   @Column({ type: 'varchar', nullable: true })
   thumbnailUrl: string | null;
 
-
   @Column({ type: 'varchar', nullable: true })
   videoUrl: string | null;
 
-  // Optional YouTube URL for video or audio
   @Column({ type: 'varchar', nullable: true })
   youtubeUrl: string | null;
 
@@ -71,7 +68,11 @@ export class Content extends BaseEntity {
   @Column({ type: 'varchar', nullable: true })
   authorName: string | null;
 
-  @Column({ type: 'text', nullable: true, comment: 'Longer description about the book' })
+  @Column({
+    type: 'text',
+    nullable: true,
+    comment: 'Longer description about the book',
+  })
   about: string | null;
 
   @Index()
@@ -108,10 +109,7 @@ export class Content extends BaseEntity {
   @OneToMany(() => Content, (content) => content.parent)
   children: Content[];
 
-  @OneToOne(() => PricingTier, (pricingTier) => pricingTier.content, {
-    cascade: true,
-  })
-  pricingTier: PricingTier | null;
+  // --- [REMOVED] The OneToOne relationship to PricingTier is now gone. ---
 
   @OneToMany(() => Purchase, (purchase) => purchase.content)
   purchases: Purchase[];

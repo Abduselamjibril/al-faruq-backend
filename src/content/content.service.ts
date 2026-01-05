@@ -10,19 +10,21 @@ import { Brackets, Repository } from 'typeorm';
 import { Content, ContentType } from './entities/content.entity';
 import { CreateContentDto } from './dto/create-content.dto';
 import { UpdateContentDto } from './dto/update-content.dto';
-import { CreatePricingDto } from './dto/create-pricing.dto';
-import { PricingTier } from '../pricing/entities/pricing-tier.entity';
 import { Language } from './entities/language.entity';
-// --- [REMOVED] All imports related to the old AudioTrack system. ---
+import {
+  ContentPricing,
+  ContentPricingScope,
+} from './entities/content-pricing.entity';
+// --- [NEW] Import the new DTO we'll create in Phase 3
+import { SetPricingDto } from './dto/set-pricing.dto';
 
 @Injectable()
 export class ContentService {
   constructor(
     @InjectRepository(Content)
     private readonly contentRepository: Repository<Content>,
-    @InjectRepository(PricingTier)
-    private readonly pricingRepository: Repository<PricingTier>,
-    // --- [REMOVED] 'AudioTrackRepository' is no longer injected. ---
+    @InjectRepository(ContentPricing) // --- [CHANGED] Inject ContentPricing repository ---
+    private readonly pricingRepository: Repository<ContentPricing>,
     @InjectRepository(Language)
     private readonly languageRepository: Repository<Language>,
   ) {}
@@ -33,7 +35,9 @@ export class ContentService {
     if (parentId) {
       const parent = await this.contentRepository.findOneBy({ id: parentId });
       if (!parent) {
-        throw new NotFoundException(`Parent content with ID ${parentId} not found.`);
+        throw new NotFoundException(
+          `Parent content with ID ${parentId} not found.`,
+        );
       }
     }
 
@@ -57,12 +61,11 @@ export class ContentService {
   }
 
   async findOneWithHierarchy(id: string): Promise<Content> {
-    // --- [REMOVED] The joins to the old 'audioTracks' table. ---
+    // --- [CHANGED] Removed join to the old 'pricingTier' table.
     const content = await this.contentRepository
       .createQueryBuilder('content')
       .leftJoinAndSelect('content.children', 'seasonsOrEpisodes')
       .leftJoinAndSelect('seasonsOrEpisodes.children', 'episodes')
-      .leftJoinAndSelect('content.pricingTier', 'pricingTier')
       .where('content.id = :id', { id })
       .orderBy({
         'seasonsOrEpisodes.createdAt': 'ASC',
@@ -76,7 +79,10 @@ export class ContentService {
     return content;
   }
 
-  async update(id: string, updateContentDto: UpdateContentDto): Promise<Content> {
+  async update(
+    id: string,
+    updateContentDto: UpdateContentDto,
+  ): Promise<Content> {
     const content = await this.contentRepository.preload({
       id: id,
       ...updateContentDto,
@@ -98,50 +104,56 @@ export class ContentService {
     return { message: 'Content successfully deleted.' };
   }
 
-  async lockContent(id: string, createPricingDto: CreatePricingDto): Promise<Content> {
-    const content = await this.findOneWithHierarchy(id);
+  // --- [REFACTORED] lockContent is now setPricing ---
+  async setPricing(
+    contentId: string,
+    setPricingDto: SetPricingDto,
+  ): Promise<Content> {
+    const content = await this.contentRepository.findOneBy({ id: contentId });
+    if (!content) {
+      throw new NotFoundException(`Content with ID ${contentId} not found.`);
+    }
 
-    if (
-      ![
-        ContentType.MOVIE,
-        ContentType.SERIES,
-        ContentType.MUSIC_VIDEO,
-        ContentType.DAWAH,
-        ContentType.DOCUMENTARY,
-        ContentType.BOOK,
-      ].includes(content.type)
-    ) {
+    const validTypesForPricing = [
+      ContentType.MOVIE,
+      ContentType.SERIES,
+      ContentType.SEASON,
+      ContentType.EPISODE,
+      ContentType.BOOK,
+    ];
+
+    if (!validTypesForPricing.includes(content.type)) {
       throw new BadRequestException(
-        'Locking is only permitted for MOVIES, SERIES, MUSIC VIDEOS, DAWAH, DOCUMENTARIES, or BOOKS.',
+        `Pricing can only be set for: ${validTypesForPricing.join(', ')}.`,
       );
     }
 
-    let pricingTier = content.pricingTier;
-    if (pricingTier) {
-      pricingTier.basePrice = createPricingDto.basePrice;
-      pricingTier.baseDurationDays = createPricingDto.baseDurationDays;
-      pricingTier.additionalTiers = createPricingDto.additionalTiers;
+    let pricing = await this.pricingRepository.findOneBy({
+      contentId,
+      contentType: content.type as unknown as ContentPricingScope,
+    });
+
+    if (pricing) {
+      // Update existing price
+      pricing.price = setPricingDto.price;
+      pricing.isActive = true;
     } else {
-      pricingTier = this.pricingRepository.create(createPricingDto);
+      // Create new price
+      pricing = this.pricingRepository.create({
+        contentId,
+        contentType: content.type as unknown as ContentPricingScope,
+        price: setPricingDto.price,
+        currency: 'ETB',
+      });
     }
+    await this.pricingRepository.save(pricing);
 
-    content.pricingTier = pricingTier;
+    // Finally, mark the content itself as locked and save
     content.isLocked = true;
-
     return this.contentRepository.save(content);
   }
 
-  async unlockContent(id: string): Promise<Content> {
-    const content = await this.contentRepository.findOneBy({ id });
-    if (!content) {
-      throw new NotFoundException(`Content with ID ${id} not found.`);
-    }
-
-    content.isLocked = false;
-    return this.contentRepository.save(content);
-  }
-
-  // --- [REMOVED] The 'addAudioTrack', 'updateAudioTrack', and 'removeAudioTrack' methods are deleted. ---
+  // --- [REMOVED] The unlockContent method is now obsolete. Access is managed by entitlements.
 
   async searchTopLevelContent(
     query: string,

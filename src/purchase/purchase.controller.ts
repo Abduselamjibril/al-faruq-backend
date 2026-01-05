@@ -14,9 +14,10 @@ import {
   Get,
   Query,
   Res,
+  Param,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { PurchaseService } from './purchase.service';
-import { InitiatePurchaseDto } from './dto/initiate-purchase.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import {
   ApiBearerAuth,
@@ -31,6 +32,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RoleName } from '../roles/entities/role.entity';
 import type { Response } from 'express';
+import { UnlockContentDto } from './dto/unlock-content.dto'; // --- [NEW] ---
 
 // Note: To avoid duplication, this should be moved to its own file.
 export const GetUser = createParamDecorator(
@@ -45,15 +47,16 @@ export const GetUser = createParamDecorator(
 export class PurchaseController {
   constructor(private readonly purchaseService: PurchaseService) {}
 
-  @Post('initiate')
-  // --- GUARDS AND ROLES APPLIED TO THIS ENDPOINT ---
+  // --- [NEW] UNLOCK ENDPOINT ---
+  @Post('unlock/:contentId')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(RoleName.USER)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Initiate a content purchase and get a payment URL (User Only)',
+    summary:
+      'Initiate an unlock purchase for a specific content item and get a payment URL',
   })
-  @ApiBody({ type: InitiatePurchaseDto })
+  @ApiBody({ type: UnlockContentDto })
   @ApiResponse({
     status: 201,
     description: 'Payment successfully initiated. Returns a checkoutUrl.',
@@ -61,77 +64,71 @@ export class PurchaseController {
   })
   @ApiResponse({
     status: 400,
-    description: 'Bad Request. Content may not be available for purchase or duration is invalid.',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized.',
-  })
-  @ApiResponse({
-    status: 403,
-    description: 'Forbidden.',
+    description:
+      'Bad Request. Content may not be available for purchase or user already has access.',
   })
   @ApiResponse({
     status: 404,
     description: 'Not Found. The specified user or content does not exist.',
   })
-  initiatePurchase(
+  unlockContent(
     @GetUser() user: { id: number },
-    @Body() initiatePurchaseDto: InitiatePurchaseDto,
+    @Param('contentId', ParseUUIDPipe) contentId: string,
+    @Body() unlockContentDto: UnlockContentDto,
   ): Promise<InitiatePurchaseResponseDto> {
-    return this.purchaseService.initiatePurchase(user.id, initiatePurchaseDto);
+    return this.purchaseService.initiateUnlock(
+      user.id,
+      contentId,
+      unlockContentDto,
+    );
   }
 
-  // --- UPDATED BRIDGE ENDPOINT (Conditional Redirect) ---
+  // --- [DEPRECATED] This endpoint will be removed later. ---
+  // @Post('initiate') ...
+
   @Get('verify-redirect')
   @ApiOperation({
-    summary: 'Handle Chapa return, verify transaction, and Auto-Redirect to App',
+    summary:
+      'Handle Chapa return, verify transaction, and Auto-Redirect to App',
   })
   async verifyAndRedirect(
     @Query('tx_ref') tx_ref: string,
     @Res() res: Response,
   ) {
     let isSuccess = false;
-
-    // 1. Verify the transaction
     if (tx_ref) {
-      // capture the result (true/false) from the service
       isSuccess = await this.purchaseService.verifyAndGrantAccess({ tx_ref });
     }
-
-    // 2. Prepare the App Link
-    // Define both Success and Failure URLs.
-    // Ensure these are handled in your Flutter App.
-    const successUrl = process.env.FLUTTER_RETURN_URL || 'app://alfaruq/purchase-success';
-    const failedUrl = process.env.FLUTTER_FAILED_URL || 'app://alfaruq/purchase-failed';
-
-    // 3. Select target URL based on success status
+    const successUrl =
+      process.env.FLUTTER_RETURN_URL || 'app://alfaruq/purchase-success';
+    const failedUrl =
+      process.env.FLUTTER_FAILED_URL || 'app://alfaruq/purchase-failed';
     const targetUrl = isSuccess ? successUrl : failedUrl;
 
-    // 4. Send Automatic Javascript Redirect (The Fix for Android)
     const html = `
       <!DOCTYPE html>
       <html>
       <head>
-          <title>${isSuccess ? 'Payment Successful' : 'Payment Failed'}</title>
+          <title>${
+            isSuccess ? 'Payment Successful' : 'Payment Failed'
+          }</title>
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <script>
-              // Automatically open the app immediately
               window.location.href = "${targetUrl}";
           </script>
       </head>
       <body>
         <p style="text-align: center; margin-top: 50px;">
-           ${isSuccess ? 'Redirecting to App...' : 'Payment Failed. Redirecting...'}
+           ${
+             isSuccess ? 'Redirecting to App...' : 'Payment Failed. Redirecting...'
+           }
         </p>
       </body>
       </html>
     `;
-
     res.send(html);
   }
 
-  // --- WEBHOOK ENDPOINT (MUST REMAIN PUBLIC) ---
   @ApiExcludeEndpoint()
   @All('chapa-webhook')
   @HttpCode(HttpStatus.OK)

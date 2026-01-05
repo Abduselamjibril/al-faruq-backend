@@ -2,19 +2,21 @@
 
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThan, FindManyOptions, Like, In } from 'typeorm';
+import { Repository, FindManyOptions, Like, In } from 'typeorm';
 import { Content, ContentType } from '../content/entities/content.entity';
-import { Purchase } from '../purchase/entities/purchase.entity';
 import { FeedQueryDto } from './dto/feed-query.dto';
 import { PaginationResponseDto } from '../utils/pagination.dto';
+import { EntitlementService } from '../entitlement/entitlement.service';
+import { UserContentEntitlement } from '../purchase/entities/user-content-entitlement.entity';
 
 @Injectable()
 export class FeedService {
   constructor(
     @InjectRepository(Content)
     private readonly contentRepository: Repository<Content>,
-    @InjectRepository(Purchase)
-    private readonly purchaseRepository: Repository<Purchase>,
+    @InjectRepository(UserContentEntitlement)
+    private readonly entitlementRepository: Repository<UserContentEntitlement>,
+    private readonly entitlementService: EntitlementService, // --- [NEW] INJECT THE ENTITLEMENT SERVICE ---
   ) {}
 
   async getFeed(
@@ -44,30 +46,31 @@ export class FeedService {
       if (year) where.publicationYear = year;
     }
 
+    // --- [REMOVED] 'pricingTier' is no longer a relation
     const [results, total] = await this.contentRepository.findAndCount({
       where,
-      relations: ['pricingTier'],
       order: { createdAt: 'DESC' },
       take,
       skip,
     });
 
-    const now = new Date();
-    const userPurchases = await this.purchaseRepository.find({
-      where: { user: { id: userId }, expiresAt: MoreThan(now) },
-      relations: ['content'],
+    // --- [CHANGED] Fetch all valid entitlements for the user ---
+    const userEntitlements = await this.entitlementRepository.find({
+      where: { userId },
     });
-    const purchasedContentIds = new Set(userPurchases.map((p) => p.content.id));
+    const entitledContentIds = new Set(
+      userEntitlements.map((e) => e.contentId),
+    );
 
+    // --- [CHANGED] Logic now checks for entitlements, not purchases ---
     results.forEach((content) => {
-      if (content.isLocked && !purchasedContentIds.has(content.id)) {
+      if (content.isLocked && !entitledContentIds.has(content.id)) {
         content.videoUrl = null;
         content.audioUrl = null;
         content.pdfUrl = null;
         content.youtubeUrl = null;
-      } else if (content.isLocked && purchasedContentIds.has(content.id)) {
+      } else if (content.isLocked && entitledContentIds.has(content.id)) {
         content.isLocked = false;
-        content.pricingTier = null;
       }
     });
 
@@ -83,7 +86,8 @@ export class FeedService {
     return new PaginationResponseDto(results, meta);
   }
 
-  async getMyPurchases(
+  // --- [RENAMED & REFACTORED] from getMyPurchases to getMyContent ---
+  async getMyContent(
     userId: number,
     query: FeedQueryDto,
   ): Promise<PaginationResponseDto<Content>> {
@@ -91,80 +95,91 @@ export class FeedService {
     const take = limit || 10;
     const skip = ((page || 1) - 1) * take;
 
-    const contentFilters: FindManyOptions<Content>['where'] = {};
-    if (category) contentFilters.type = category;
-    if (category === ContentType.BOOK) {
-      if (author) contentFilters.authorName = Like(`%${author}%`);
-      if (genre) contentFilters.genre = Like(`%${genre}%`);
-      if (year) contentFilters.publicationYear = year;
+    // First, find all content IDs the user is entitled to
+    const entitlements = await this.entitlementRepository.find({
+      where: { userId },
+      select: ['contentId'],
+    });
+    const entitledContentIds = entitlements.map((e) => e.contentId);
+
+    if (entitledContentIds.length === 0) {
+      const meta = {
+        totalItems: 0,
+        itemCount: 0,
+        itemsPerPage: take,
+        totalPages: 0,
+        currentPage: page || 1,
+      };
+      return new PaginationResponseDto([], meta);
     }
 
-    const where: FindManyOptions<Purchase>['where'] = {
-      user: { id: userId },
-      expiresAt: MoreThan(new Date()),
-      content:
-        Object.keys(contentFilters).length > 0 ? contentFilters : undefined,
+    // Now, find the content that matches those IDs and the filters
+    const where: FindManyOptions<Content>['where'] = {
+      id: In(entitledContentIds),
     };
 
-    const [purchases, total] = await this.purchaseRepository.findAndCount({
+    if (category) where.type = category;
+    if (category === ContentType.BOOK) {
+      if (author) where.authorName = Like(`%${author}%`);
+      if (genre) where.genre = Like(`%${genre}%`);
+      if (year) where.publicationYear = year;
+    }
+
+    const [results, total] = await this.contentRepository.findAndCount({
       where,
-      relations: ['content'],
       order: { createdAt: 'DESC' },
       take,
       skip,
     });
 
-    const purchasedContent = purchases.map((purchase) => {
-      const content = purchase.content;
+    // All content returned here is accessible, so unlock it
+    const accessibleContent = results.map((content) => {
       content.isLocked = false;
-      content.pricingTier = null;
       return content;
     });
 
     const totalPages = Math.ceil(total / take);
     const meta = {
       totalItems: total,
-      itemCount: purchasedContent.length,
+      itemCount: accessibleContent.length,
       itemsPerPage: take,
       totalPages,
       currentPage: page || 1,
     };
 
-    return new PaginationResponseDto(purchasedContent, meta);
+    return new PaginationResponseDto(accessibleContent, meta);
   }
-
-  // --- [REMOVED] The 'getAllTafsir' method is deleted. ---
 
   async getContentForUser(
     contentId: string,
     userId: number,
   ): Promise<Content> {
-    // Deep join: content -> children (seasons) -> children (episodes)
-
-    let content: Content | undefined;
-    const found = await this.contentRepository.findOne({ where: { id: contentId } });
+    let content: Content | null = null;
+    const found = await this.contentRepository.findOne({
+      where: { id: contentId },
+    });
     if (!found) {
       throw new NotFoundException(`Content with ID ${contentId} not found.`);
     }
-    if (found.type === ContentType.SERIES || found.type === ContentType.PROPHET_HISTORY) {
-      content = await this.contentRepository
-        .createQueryBuilder('content')
-        .leftJoinAndSelect('content.children', 'seasonsOrEpisodes')
-        .leftJoinAndSelect('seasonsOrEpisodes.children', 'episodes')
-        .leftJoinAndSelect('content.pricingTier', 'pricingTier')
-        .where('content.id = :id', { id: contentId })
-        .orderBy({
-          'seasonsOrEpisodes.createdAt': 'ASC',
-          'episodes.createdAt': 'ASC',
-        })
-        .getOne() || undefined;
-    } else {
-      content = await this.contentRepository
-        .createQueryBuilder('content')
-        .leftJoinAndSelect('content.pricingTier', 'pricingTier')
-        .where('content.id = :id', { id: contentId })
-        .getOne() || undefined;
+
+    // Simplified query builder, no longer needs pricingTier
+    const qb = this.contentRepository.createQueryBuilder('content');
+    if (
+      found.type === ContentType.SERIES ||
+      found.type === ContentType.PROPHET_HISTORY
+    ) {
+      qb.leftJoinAndSelect('content.children', 'seasonsOrEpisodes').leftJoinAndSelect(
+        'seasonsOrEpisodes.children',
+        'episodes',
+      );
     }
+    qb.where('content.id = :id', { id: contentId }).orderBy({
+      'seasonsOrEpisodes.createdAt': 'ASC',
+      'episodes.createdAt': 'ASC',
+    });
+
+    content = await qb.getOne();
+
     if (!content) {
       throw new NotFoundException(`Content with ID ${contentId} not found.`);
     }
@@ -173,12 +188,16 @@ export class FeedService {
       return content;
     }
 
-    const hasAccess = await this.checkUserAccess(contentId, userId);
+    // --- [CHANGED] Use EntitlementService for the access check ---
+    const hasAccess = await this.entitlementService.checkUserAccess(
+      userId,
+      contentId,
+    );
 
     if (hasAccess) {
       content.isLocked = false;
-      content.pricingTier = null;
     } else {
+      // If no access, redact sensitive URLs
       content.videoUrl = null;
       content.audioUrl = null;
       content.pdfUrl = null;
@@ -186,21 +205,5 @@ export class FeedService {
     }
 
     return content;
-  }
-
-  private async checkUserAccess(
-    contentId: string,
-    userId: number,
-  ): Promise<boolean> {
-    const now = new Date();
-    const purchase = await this.purchaseRepository.findOne({
-      where: {
-        user: { id: userId },
-        content: { id: contentId },
-        expiresAt: MoreThan(now),
-      },
-    });
-
-    return !!purchase;
   }
 }

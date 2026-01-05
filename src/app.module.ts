@@ -27,8 +27,9 @@ import { SearchModule } from './search/search.module';
 import { LanguageModule } from './language/language.module';
 import { ReportsModule } from './reports/reports.module';
 import { NewsModule } from './news/news.module';
-import { QuranModule } from './quran/quran.module'; // --- [NEW] IMPORT QURAN MODULE ---
-import { BookmarkModule } from './bookmark/bookmark.module'; // --- [NEW] IMPORT BOOKMARK MODULE ---
+import { QuranModule } from './quran/quran.module';
+import { BookmarkModule } from './bookmark/bookmark.module';
+import { EntitlementModule } from './entitlement/entitlement.module'; // --- [NEW] IMPORT ENTITLEMENT MODULE ---
 
 @Module({
   imports: [
@@ -51,8 +52,10 @@ import { BookmarkModule } from './bookmark/bookmark.module'; // --- [NEW] IMPORT
 
     // Application Modules
     AuthModule,
+    BookmarkModule,
     ContentModule,
     DevicesModule,
+    EntitlementModule, // --- [NEW] ADD THE ENTITLEMENT MODULE HERE ---
     FeedModule,
     FirebaseModule,
     LanguageModule,
@@ -60,7 +63,7 @@ import { BookmarkModule } from './bookmark/bookmark.module'; // --- [NEW] IMPORT
     NewsModule,
     NotificationsModule,
     PurchaseModule,
-    QuranModule, // --- [NEW] ADD THE QURAN MODULE HERE ---
+    QuranModule,
     RemindersModule,
     ReportsModule,
     SearchModule,
@@ -68,7 +71,6 @@ import { BookmarkModule } from './bookmark/bookmark.module'; // --- [NEW] IMPORT
     UploadModule,
     UsersModule,
     YoutubeModule,
-    BookmarkModule, // --- [NEW] ADD BOOKMARK MODULE HERE ---
   ],
   controllers: [AppController],
   providers: [AppService],
