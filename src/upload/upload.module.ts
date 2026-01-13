@@ -18,5 +18,6 @@ import { CloudinaryAdapter } from './adapters/cloudinary.adapter';
       useClass: CloudinaryAdapter, // <-- Swap this class to change upload provider
     },
   ],
+  exports: [UploadService],
 })
 export class UploadModule {}

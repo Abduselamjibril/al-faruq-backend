@@ -1,7 +1,8 @@
 // src/purchase/dto/initiate-purchase.dto.ts
 
-import { IsInt, IsNotEmpty, IsUUID, Min } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger'; // --- IMPORT THIS ---
+import { IsEnum, IsNotEmpty, IsUUID } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+import { AccessType } from '../../common/enums/access-type.enum'; // --- [FIXED] ---
 
 export class InitiatePurchaseDto {
   @ApiProperty({
@@ -13,11 +14,11 @@ export class InitiatePurchaseDto {
   contentId: string;
 
   @ApiProperty({
-    description: 'The total number of days the user wants to purchase access for.',
-    example: 30,
+    description: 'The type of access the user wants to purchase (PERMANENT or TEMPORARY).',
+    enum: AccessType, // --- [FIXED] ---
+    example: AccessType.TEMPORARY,
   })
-  @IsInt()
-  @Min(1)
+  @IsEnum(AccessType) // --- [FIXED] ---
   @IsNotEmpty()
-  durationDays: number;
+  accessType: AccessType;
 }

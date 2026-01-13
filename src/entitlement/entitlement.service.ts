@@ -1,42 +1,105 @@
 // src/entitlement/entitlement.service.ts
 
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { MoreThan, Repository, IsNull } from 'typeorm'; // --- [FIX] IMPORT IsNull ---
+import { MoreThan, Repository, In, LessThan } from 'typeorm';
 import { UserContentEntitlement } from '../purchase/entities/user-content-entitlement.entity';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { AccessType } from '../common/enums/access-type.enum';
+import { Content } from '../content/entities/content.entity';
 
 @Injectable()
 export class EntitlementService {
+  private readonly logger = new Logger(EntitlementService.name);
+
   constructor(
     @InjectRepository(UserContentEntitlement)
     private readonly entitlementRepository: Repository<UserContentEntitlement>,
+    @InjectRepository(Content)
+    private readonly contentRepository: Repository<Content>,
   ) {}
 
   /**
-   * Checks if a user has a valid entitlement for a specific piece of content.
-   * This is the new source of truth for access control.
-   * @param userId The ID of the user.
-   * @param contentId The ID of the content (e.g., an episode).
+   * Overloaded method. Checks access by either querying the DB or checking a pre-fetched set of IDs.
+   * @param userId The ID of the user. Pass -1 if using the pre-fetched set.
+   * @param contentId The ID of the content the user wants to access.
+   * @param entitledContentIds (Optional) A pre-fetched Set of content IDs the user is entitled to.
    * @returns The valid entitlement record if access is granted, otherwise null.
    */
   async checkUserAccess(
     userId: number,
     contentId: string,
-  ): Promise<UserContentEntitlement | null> {
-    const now = new Date();
-
-    // Find the entitlement for this specific user and content.
-    // The query checks for two conditions:
-    // 1. The entitlement is PERMANENT (validUntil is NULL).
-    // 2. The entitlement is TEMPORARY and has not expired yet (validUntil > now).
-    const entitlement = await this.entitlementRepository.findOne({
-      where: [
-        // --- [FIX] Use the IsNull() operator instead of the 'null' literal ---
-        { userId, contentId, validUntil: IsNull() }, // Permanent access
-        { userId, contentId, validUntil: MoreThan(now) }, // Temporary, non-expired access
-      ],
+    entitledContentIds?: Set<string>,
+  ): Promise<UserContentEntitlement | boolean | null> {
+    // Step 1: Fetch the content and its full parent hierarchy.
+    const content = await this.contentRepository.findOne({
+      where: { id: contentId },
+      relations: ['parent', 'parent.parent'],
     });
 
-    return entitlement; // Returns the entitlement object or null
+    if (!content) {
+      this.logger.warn(`checkUserAccess failed: Content with ID ${contentId} not found.`);
+      return null;
+    }
+
+    const idsToCheck: string[] = [content.id];
+    if (content.parent) {
+      idsToCheck.push(content.parent.id);
+      if (content.parent.parent) {
+        idsToCheck.push(content.parent.parent.id);
+      }
+    }
+
+    // --- [NEW] OPTIMIZED PATH ---
+    // If a pre-fetched set is provided, check against it without hitting the DB again.
+    if (entitledContentIds) {
+      for (const id of idsToCheck) {
+        if (entitledContentIds.has(id)) {
+          return true; // Access granted, we don't need the full entitlement object here.
+        }
+      }
+      return null; // No access found in the pre-fetched set.
+    }
+    
+    // --- ORIGINAL PATH (for single checks like in PurchaseService) ---
+    const now = new Date();
+    const entitlement = await this.entitlementRepository.findOne({
+      where: [
+        { userId, contentId: In(idsToCheck), accessType: AccessType.PERMANENT },
+        { userId, contentId: In(idsToCheck), accessType: AccessType.TEMPORARY, validUntil: MoreThan(now) },
+      ],
+      order: {
+        accessType: 'DESC',
+        validUntil: 'DESC',
+      },
+    });
+
+    return entitlement;
+  }
+
+  @Cron(CronExpression.EVERY_DAY_AT_3AM)
+  async handleExpiredEntitlements() {
+    this.logger.log('Running daily job to process expired entitlements...');
+    const now = new Date();
+
+    const expiredEntitlements = await this.entitlementRepository.find({
+      where: {
+        accessType: AccessType.TEMPORARY,
+        validUntil: LessThan(now), // --- [FIXED] Corrected logic to find expired items.
+      },
+    });
+
+    if (expiredEntitlements.length === 0) {
+      this.logger.log('No expired entitlements found.');
+      return;
+    }
+
+    this.logger.log(`Found ${expiredEntitlements.length} expired entitlements.`);
+
+    for (const entitlement of expiredEntitlements) {
+      this.logger.debug(`Entitlement ID ${entitlement.id} for User ${entitlement.userId} has expired.`);
+    }
+
+    this.logger.log('Finished processing expired entitlements.');
   }
 }

@@ -7,19 +7,20 @@ import { FeedController } from './feed.controller';
 import { Content } from '../content/entities/content.entity';
 import { EntitlementModule } from '../entitlement/entitlement.module';
 import { UserContentEntitlement } from '../purchase/entities/user-content-entitlement.entity';
-import { FeedAccessService } from './feed-access.service'; // --- [NEW] ---
-import { ContentPricing } from '../content/entities/content-pricing.entity'; // --- [NEW] ---
+
+import { ContentPricing } from '../content/entities/content-pricing.entity';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       Content,
       UserContentEntitlement,
-      ContentPricing, // --- [NEW] ---
+      ContentPricing,
     ]),
     EntitlementModule,
   ],
   controllers: [FeedController],
-  providers: [FeedService, FeedAccessService], // --- [NEW] Add FeedAccessService ---
+  
+  providers: [FeedService],
 })
 export class FeedModule {}

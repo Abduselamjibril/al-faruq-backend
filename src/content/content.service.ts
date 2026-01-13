@@ -15,15 +15,15 @@ import {
   ContentPricing,
   ContentPricingScope,
 } from './entities/content-pricing.entity';
-// --- [NEW] Import the new DTO we'll create in Phase 3
-import { SetPricingDto } from './dto/set-pricing.dto';
+import { LockContentDto } from './dto/lock-content.dto';
+import { AccessType } from '../common/enums/access-type.enum';
 
 @Injectable()
 export class ContentService {
   constructor(
     @InjectRepository(Content)
     private readonly contentRepository: Repository<Content>,
-    @InjectRepository(ContentPricing) // --- [CHANGED] Inject ContentPricing repository ---
+    @InjectRepository(ContentPricing)
     private readonly pricingRepository: Repository<ContentPricing>,
     @InjectRepository(Language)
     private readonly languageRepository: Repository<Language>,
@@ -31,16 +31,12 @@ export class ContentService {
 
   async create(createContentDto: CreateContentDto): Promise<Content> {
     const { parentId } = createContentDto;
-
     if (parentId) {
       const parent = await this.contentRepository.findOneBy({ id: parentId });
       if (!parent) {
-        throw new NotFoundException(
-          `Parent content with ID ${parentId} not found.`,
-        );
+        throw new NotFoundException(`Parent content with ID ${parentId} not found.`);
       }
     }
-
     const newContent = this.contentRepository.create(createContentDto);
     return this.contentRepository.save(newContent);
   }
@@ -48,12 +44,9 @@ export class ContentService {
   findAllTopLevel(): Promise<Content[]> {
     return this.contentRepository.find({
       where: [
-        { type: ContentType.MOVIE },
-        { type: ContentType.SERIES },
-        { type: ContentType.MUSIC_VIDEO },
-        { type: ContentType.DAWAH },
-        { type: ContentType.DOCUMENTARY },
-        { type: ContentType.PROPHET_HISTORY },
+        { type: ContentType.MOVIE }, { type: ContentType.SERIES },
+        { type: ContentType.MUSIC_VIDEO }, { type: ContentType.DAWAH },
+        { type: ContentType.DOCUMENTARY }, { type: ContentType.PROPHET_HISTORY },
         { type: ContentType.BOOK },
       ],
       order: { createdAt: 'DESC' },
@@ -61,37 +54,23 @@ export class ContentService {
   }
 
   async findOneWithHierarchy(id: string): Promise<Content> {
-    // --- [CHANGED] Removed join to the old 'pricingTier' table.
-    const content = await this.contentRepository
-      .createQueryBuilder('content')
+    const content = await this.contentRepository.createQueryBuilder('content')
       .leftJoinAndSelect('content.children', 'seasonsOrEpisodes')
       .leftJoinAndSelect('seasonsOrEpisodes.children', 'episodes')
       .where('content.id = :id', { id })
-      .orderBy({
-        'seasonsOrEpisodes.createdAt': 'ASC',
-        'episodes.createdAt': 'ASC',
-      })
+      .orderBy({ 'seasonsOrEpisodes.createdAt': 'ASC', 'episodes.createdAt': 'ASC' })
       .getOne();
-
     if (!content) {
       throw new NotFoundException(`Content with ID ${id} not found.`);
     }
     return content;
   }
 
-  async update(
-    id: string,
-    updateContentDto: UpdateContentDto,
-  ): Promise<Content> {
-    const content = await this.contentRepository.preload({
-      id: id,
-      ...updateContentDto,
-    });
-
+  async update(id: string, updateContentDto: UpdateContentDto): Promise<Content> {
+    const content = await this.contentRepository.preload({ id: id, ...updateContentDto });
     if (!content) {
       throw new NotFoundException(`Content with ID ${id} not found.`);
     }
-
     return this.contentRepository.save(content);
   }
 
@@ -104,61 +83,64 @@ export class ContentService {
     return { message: 'Content successfully deleted.' };
   }
 
-  // --- [REFACTORED] lockContent is now setPricing ---
-  async setPricing(
-    contentId: string,
-    setPricingDto: SetPricingDto,
-  ): Promise<Content> {
+  async lockContent(contentId: string, lockContentDto: LockContentDto): Promise<Content> {
     const content = await this.contentRepository.findOneBy({ id: contentId });
     if (!content) {
       throw new NotFoundException(`Content with ID ${contentId} not found.`);
     }
 
-    const validTypesForPricing = [
-      ContentType.MOVIE,
-      ContentType.SERIES,
-      ContentType.SEASON,
-      ContentType.EPISODE,
-      ContentType.BOOK,
-    ];
-
-    if (!validTypesForPricing.includes(content.type)) {
-      throw new BadRequestException(
-        `Pricing can only be set for: ${validTypesForPricing.join(', ')}.`,
-      );
+    const { permanentPrice, temporaryPrice } = lockContentDto;
+    if (!permanentPrice && !temporaryPrice) {
+      throw new BadRequestException('You must provide at least one pricing option (permanent or temporary).');
     }
 
-    let pricing = await this.pricingRepository.findOneBy({
-      contentId,
-      contentType: content.type as unknown as ContentPricingScope,
-    });
+    await this.pricingRepository.update({ contentId }, { isActive: false });
 
-    if (pricing) {
-      // Update existing price
-      pricing.price = setPricingDto.price;
-      pricing.isActive = true;
-    } else {
-      // Create new price
-      pricing = this.pricingRepository.create({
+    if (permanentPrice !== undefined) {
+      await this.pricingRepository.save({
         contentId,
         contentType: content.type as unknown as ContentPricingScope,
-        price: setPricingDto.price,
-        currency: 'ETB',
+        accessType: AccessType.PERMANENT,
+        price: permanentPrice,
+        durationDays: null,
+        isActive: true,
       });
     }
-    await this.pricingRepository.save(pricing);
 
-    // Finally, mark the content itself as locked and save
+    if (temporaryPrice) {
+      await this.pricingRepository.save({
+        contentId,
+        contentType: content.type as unknown as ContentPricingScope,
+        accessType: AccessType.TEMPORARY,
+        price: temporaryPrice.price,
+        durationDays: temporaryPrice.durationDays,
+        isActive: true,
+      });
+    }
+
     content.isLocked = true;
-    return this.contentRepository.save(content);
+    const savedContent = await this.contentRepository.save(content);
+
+    // --- [FIX] Explicitly nullify sensitive URLs before returning the response ---
+    savedContent.videoUrl = null;
+    savedContent.audioUrl = null;
+    savedContent.pdfUrl = null;
+    savedContent.youtubeUrl = null;
+
+    return savedContent;
   }
 
-  // --- [REMOVED] The unlockContent method is now obsolete. Access is managed by entitlements.
-
-  async searchTopLevelContent(
-    query: string,
-    type?: ContentType,
-  ): Promise<Content[]> {
+  async unlockContent(id: string): Promise<Content> {
+    const content = await this.contentRepository.findOneBy({ id });
+    if (!content) {
+      throw new NotFoundException(`Content with ID ${id} not found.`);
+    }
+    await this.pricingRepository.update({ contentId: id }, { isActive: false });
+    content.isLocked = false;
+    return this.contentRepository.save(content);
+  }
+  
+  async searchTopLevelContent(query: string, type?: ContentType): Promise<Content[]> {
     const searchTerm = `%${query.toLowerCase()}%`;
     const qb = this.contentRepository.createQueryBuilder('content');
 
@@ -167,12 +149,8 @@ export class ContentService {
     } else {
       qb.where('content.type IN (:...types)', {
         types: [
-          ContentType.MOVIE,
-          ContentType.SERIES,
-          ContentType.MUSIC_VIDEO,
-          ContentType.DAWAH,
-          ContentType.DOCUMENTARY,
-          ContentType.PROPHET_HISTORY,
+          ContentType.MOVIE, ContentType.SERIES, ContentType.MUSIC_VIDEO,
+          ContentType.DAWAH, ContentType.DOCUMENTARY, ContentType.PROPHET_HISTORY,
           ContentType.BOOK,
         ],
       });
@@ -182,13 +160,9 @@ export class ContentService {
       new Brackets((subQb) => {
         subQb
           .where('LOWER(content.title) LIKE :searchTerm', { searchTerm })
-          .orWhere('LOWER(content.description) LIKE :searchTerm', {
-            searchTerm,
-          })
+          .orWhere('LOWER(content.description) LIKE :searchTerm', { searchTerm })
           .orWhere('LOWER(content.tags) LIKE :searchTerm', { searchTerm })
-          .orWhere('LOWER(content.authorName) LIKE :searchTerm', {
-            searchTerm,
-          })
+          .orWhere('LOWER(content.authorName) LIKE :searchTerm', { searchTerm })
           .orWhere('LOWER(content.genre) LIKE :searchTerm', { searchTerm });
       }),
     )
@@ -209,11 +183,8 @@ export class ContentService {
       })
       .andWhere(
         new Brackets((qb) => {
-          qb.where('LOWER(episode.title) LIKE :searchTerm', {
-            searchTerm,
-          }).orWhere('LOWER(parentContent.title) LIKE :searchTerm', {
-            searchTerm,
-          });
+          qb.where('LOWER(episode.title) LIKE :searchTerm', { searchTerm })
+            .orWhere('LOWER(parentContent.title) LIKE :searchTerm', { searchTerm });
         }),
       )
       .orderBy('parentContent.title', 'ASC')

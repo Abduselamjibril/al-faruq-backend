@@ -8,6 +8,7 @@ import { FeedQueryDto } from './dto/feed-query.dto';
 import { PaginationResponseDto } from '../utils/pagination.dto';
 import { EntitlementService } from '../entitlement/entitlement.service';
 import { UserContentEntitlement } from '../purchase/entities/user-content-entitlement.entity';
+import { ContentPricing } from '../content/entities/content-pricing.entity';
 
 @Injectable()
 export class FeedService {
@@ -16,7 +17,9 @@ export class FeedService {
     private readonly contentRepository: Repository<Content>,
     @InjectRepository(UserContentEntitlement)
     private readonly entitlementRepository: Repository<UserContentEntitlement>,
-    private readonly entitlementService: EntitlementService, // --- [NEW] INJECT THE ENTITLEMENT SERVICE ---
+    @InjectRepository(ContentPricing)
+    private readonly pricingRepository: Repository<ContentPricing>,
+    private readonly entitlementService: EntitlementService,
   ) {}
 
   async getFeed(
@@ -29,12 +32,8 @@ export class FeedService {
 
     const where: FindManyOptions<Content>['where'] = {};
     const topLevelTypes = [
-      ContentType.MOVIE,
-      ContentType.SERIES,
-      ContentType.MUSIC_VIDEO,
-      ContentType.DAWAH,
-      ContentType.DOCUMENTARY,
-      ContentType.PROPHET_HISTORY,
+      ContentType.MOVIE, ContentType.SERIES, ContentType.MUSIC_VIDEO,
+      ContentType.DAWAH, ContentType.DOCUMENTARY, ContentType.PROPHET_HISTORY,
       ContentType.BOOK,
     ];
 
@@ -46,78 +45,62 @@ export class FeedService {
       if (year) where.publicationYear = year;
     }
 
-    // --- [REMOVED] 'pricingTier' is no longer a relation
-    const [results, total] = await this.contentRepository.findAndCount({
-      where,
-      order: { createdAt: 'DESC' },
-      take,
-      skip,
+    const [results, total] = await this.contentRepository.findAndCount({ where, order: { createdAt: 'DESC' }, take, skip });
+
+    const userEntitlements = await this.entitlementRepository.find({ where: { userId } });
+    const entitledContentIds = new Set(userEntitlements.map((e) => e.contentId));
+    
+    const lockedContentIds = results
+      .filter((c) => c.isLocked && !entitledContentIds.has(c.id))
+      .map((c) => c.id);
+
+    let allPricingTiers: ContentPricing[] = [];
+    if (lockedContentIds.length > 0) {
+      allPricingTiers = await this.pricingRepository.find({
+        where: { contentId: In(lockedContentIds), isActive: true },
+      });
+    }
+
+    const pricingMap = new Map<string, ContentPricing[]>();
+    allPricingTiers.forEach(tier => {
+      const tiers = pricingMap.get(tier.contentId) || [];
+      tiers.push(tier);
+      pricingMap.set(tier.contentId, tiers);
     });
 
-    // --- [CHANGED] Fetch all valid entitlements for the user ---
-    const userEntitlements = await this.entitlementRepository.find({
-      where: { userId },
-    });
-    const entitledContentIds = new Set(
-      userEntitlements.map((e) => e.contentId),
-    );
-
-    // --- [CHANGED] Logic now checks for entitlements, not purchases ---
     results.forEach((content) => {
-      if (content.isLocked && !entitledContentIds.has(content.id)) {
-        content.videoUrl = null;
-        content.audioUrl = null;
-        content.pdfUrl = null;
-        content.youtubeUrl = null;
-      } else if (content.isLocked && entitledContentIds.has(content.id)) {
-        content.isLocked = false;
+      if (content.isLocked) {
+        if (entitledContentIds.has(content.id)) {
+          content.isLocked = false;
+        } else {
+          content.videoUrl = null;
+          content.audioUrl = null;
+          content.pdfUrl = null;
+          content.youtubeUrl = null;
+          content.pricingTiers = pricingMap.get(content.id) || [];
+        }
       }
     });
 
     const totalPages = Math.ceil(total / take);
-    const meta = {
-      totalItems: total,
-      itemCount: results.length,
-      itemsPerPage: take,
-      totalPages,
-      currentPage: page || 1,
-    };
+    const meta = { totalItems: total, itemCount: results.length, itemsPerPage: take, totalPages, currentPage: page || 1 };
 
     return new PaginationResponseDto(results, meta);
   }
 
-  // --- [RENAMED & REFACTORED] from getMyPurchases to getMyContent ---
-  async getMyContent(
-    userId: number,
-    query: FeedQueryDto,
-  ): Promise<PaginationResponseDto<Content>> {
+  async getMyPurchases(userId: number, query: FeedQueryDto): Promise<PaginationResponseDto<Content>> {
     const { page, limit, category, author, genre, year } = query;
     const take = limit || 10;
     const skip = ((page || 1) - 1) * take;
 
-    // First, find all content IDs the user is entitled to
-    const entitlements = await this.entitlementRepository.find({
-      where: { userId },
-      select: ['contentId'],
-    });
+    const entitlements = await this.entitlementRepository.find({ where: { userId }, select: ['contentId'] });
     const entitledContentIds = entitlements.map((e) => e.contentId);
 
     if (entitledContentIds.length === 0) {
-      const meta = {
-        totalItems: 0,
-        itemCount: 0,
-        itemsPerPage: take,
-        totalPages: 0,
-        currentPage: page || 1,
-      };
-      return new PaginationResponseDto([], meta);
+      return new PaginationResponseDto([], { totalItems: 0, itemCount: 0, itemsPerPage: take, totalPages: 0, currentPage: page || 1 });
     }
 
-    // Now, find the content that matches those IDs and the filters
-    const where: FindManyOptions<Content>['where'] = {
-      id: In(entitledContentIds),
-    };
-
+    const where: FindManyOptions<Content>['where'] = { id: In(entitledContentIds) };
     if (category) where.type = category;
     if (category === ContentType.BOOK) {
       if (author) where.authorName = Like(`%${author}%`);
@@ -125,85 +108,93 @@ export class FeedService {
       if (year) where.publicationYear = year;
     }
 
-    const [results, total] = await this.contentRepository.findAndCount({
-      where,
-      order: { createdAt: 'DESC' },
-      take,
-      skip,
-    });
+    const [results, total] = await this.contentRepository.findAndCount({ where, order: { createdAt: 'DESC' }, take, skip });
 
-    // All content returned here is accessible, so unlock it
     const accessibleContent = results.map((content) => {
       content.isLocked = false;
       return content;
     });
 
     const totalPages = Math.ceil(total / take);
-    const meta = {
-      totalItems: total,
-      itemCount: accessibleContent.length,
-      itemsPerPage: take,
-      totalPages,
-      currentPage: page || 1,
-    };
-
-    return new PaginationResponseDto(accessibleContent, meta);
+    return new PaginationResponseDto(accessibleContent, { totalItems: total, itemCount: accessibleContent.length, itemsPerPage: take, totalPages, currentPage: page || 1 });
   }
 
-  async getContentForUser(
-    contentId: string,
-    userId: number,
-  ): Promise<Content> {
-    let content: Content | null = null;
-    const found = await this.contentRepository.findOne({
-      where: { id: contentId },
-    });
-    if (!found) {
-      throw new NotFoundException(`Content with ID ${contentId} not found.`);
-    }
-
-    // Simplified query builder, no longer needs pricingTier
+  async getContentForUser(contentId: string, userId: number): Promise<Content> {
     const qb = this.contentRepository.createQueryBuilder('content');
-    if (
-      found.type === ContentType.SERIES ||
-      found.type === ContentType.PROPHET_HISTORY
-    ) {
-      qb.leftJoinAndSelect('content.children', 'seasonsOrEpisodes').leftJoinAndSelect(
-        'seasonsOrEpisodes.children',
-        'episodes',
-      );
-    }
-    qb.where('content.id = :id', { id: contentId }).orderBy({
-      'seasonsOrEpisodes.createdAt': 'ASC',
-      'episodes.createdAt': 'ASC',
-    });
+    qb.leftJoinAndSelect('content.children', 'seasonsOrEpisodes')
+      .leftJoinAndSelect('seasonsOrEpisodes.children', 'episodes')
+      .where('content.id = :id', { id: contentId })
+      .orderBy({ 'seasonsOrEpisodes.createdAt': 'ASC', 'episodes.createdAt': 'ASC' });
 
-    content = await qb.getOne();
-
+    const content: Content | null = await qb.getOne();
     if (!content) {
       throw new NotFoundException(`Content with ID ${contentId} not found.`);
     }
 
-    if (!content.isLocked) {
-      return content;
-    }
+    // --- [NEW] Fetch all of the user's entitlements for efficient checking ---
+    const userEntitlements = await this.entitlementRepository.find({ where: { userId } });
+    const entitledContentIds = new Set(userEntitlements.map(e => e.contentId));
+    
+    // --- [NEW] Fetch all relevant pricing in one go for efficiency ---
+    const allIdsInHierarchy = this._getIdsFromHierarchy(content);
+    const allPricing = await this.pricingRepository.find({
+      where: { contentId: In(allIdsInHierarchy), isActive: true },
+    });
+    const pricingMap = new Map<string, ContentPricing[]>();
+    allPricing.forEach(p => {
+        const tiers = pricingMap.get(p.contentId) || [];
+        tiers.push(p);
+        pricingMap.set(p.contentId, tiers);
+    });
 
-    // --- [CHANGED] Use EntitlementService for the access check ---
-    const hasAccess = await this.entitlementService.checkUserAccess(
-      userId,
-      contentId,
-    );
-
-    if (hasAccess) {
-      content.isLocked = false;
-    } else {
-      // If no access, redact sensitive URLs
-      content.videoUrl = null;
-      content.audioUrl = null;
-      content.pdfUrl = null;
-      content.youtubeUrl = null;
-    }
+    // --- [NEW] Start the recursive processing ---
+    await this._processContentNode(content, entitledContentIds, pricingMap);
 
     return content;
+  }
+
+  // --- [NEW] Recursive helper method ---
+  private async _processContentNode(
+    node: Content,
+    entitledContentIds: Set<string>,
+    pricingMap: Map<string, ContentPricing[]>
+  ) {
+    // Check if user has access via this node OR any parent (already included in the set)
+    const hasAccess = await this.entitlementService.checkUserAccess(
+      -1, // We pass -1 for userId as we are checking against a pre-fetched set
+      node.id,
+      entitledContentIds, // Pass the pre-fetched set for efficiency
+    );
+    
+    if (node.isLocked) {
+      if (hasAccess) {
+        node.isLocked = false;
+      } else {
+        // Redact URLs and attach pricing
+        node.videoUrl = null;
+        node.audioUrl = null;
+        node.pdfUrl = null;
+        node.youtubeUrl = null;
+        node.pricingTiers = pricingMap.get(node.id) || [];
+      }
+    }
+    
+    // Recursively process children
+    if (node.children && node.children.length > 0) {
+      for (const child of node.children) {
+        await this._processContentNode(child, entitledContentIds, pricingMap);
+      }
+    }
+  }
+  
+  // --- [NEW] Helper to get all IDs in the tree ---
+  private _getIdsFromHierarchy(root: Content): string[] {
+      const ids: string[] = [root.id];
+      if (root.children && root.children.length > 0) {
+          for (const child of root.children) {
+              ids.push(...this._getIdsFromHierarchy(child));
+          }
+      }
+      return ids;
   }
 }

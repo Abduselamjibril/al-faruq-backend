@@ -8,11 +8,9 @@ import {
   Index,
   PrimaryGeneratedColumn,
 } from 'typeorm';
+import { AccessType } from '../../common/enums/access-type.enum'; // --- [CHANGED] ---
 
-export enum EntitlementAccessType {
-  TEMPORARY = 'TEMPORARY',
-  PERMANENT = 'PERMANENT',
-}
+// --- [REMOVED] The local enum is no longer needed here.
 
 export enum EntitlementSource {
   SUBSCRIPTION = 'SUBSCRIPTION',
@@ -51,9 +49,9 @@ export class UserContentEntitlement extends BaseEntity {
 
   @Column({
     type: 'enum',
-    enum: EntitlementAccessType,
+    enum: AccessType, // --- [CHANGED] ---
   })
-  accessType: EntitlementAccessType;
+  accessType: AccessType;
 
   @Column({ type: 'timestamp with time zone', default: () => 'CURRENT_TIMESTAMP' })
   validFrom: Date;

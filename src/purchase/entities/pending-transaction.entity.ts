@@ -8,18 +8,15 @@ import {
   Index,
   PrimaryColumn,
 } from 'typeorm';
-import {
-  EntitlementAccessType,
-  EntitlementContentScope,
-} from './user-content-entitlement.entity';
+import { EntitlementContentScope } from './user-content-entitlement.entity';
 import { PaymentType } from './purchase.entity';
+import { AccessType } from '../../common/enums/access-type.enum'; // --- [FIXED] ---
 
 @Entity()
 export class PendingTransaction extends BaseEntity {
   @PrimaryColumn({ type: 'varchar' })
   tx_ref: string;
 
-  // --- [DEPRECATED but kept for now] Will be null for permanent unlocks ---
   @Column({ type: 'integer', nullable: true })
   durationDays: number | null;
 
@@ -29,7 +26,6 @@ export class PendingTransaction extends BaseEntity {
   @Column({ type: 'uuid' })
   contentId: string;
 
-  // --- [NEW] Fields to map directly to an entitlement ---
   @Column({
     type: 'enum',
     enum: PaymentType,
@@ -45,10 +41,9 @@ export class PendingTransaction extends BaseEntity {
 
   @Column({
     type: 'enum',
-    enum: EntitlementAccessType,
+    enum: AccessType, // --- [FIXED] ---
   })
-  accessType: EntitlementAccessType;
-  // --- [NEW] End of new fields ---
+  accessType: AccessType;
 
   @CreateDateColumn()
   @Index({ expireAfterSeconds: 86400 })

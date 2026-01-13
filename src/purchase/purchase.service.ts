@@ -18,14 +18,15 @@ import { Purchase, PaymentType, ContentScope } from './entities/purchase.entity'
 import { Content } from '../content/entities/content.entity';
 import { User } from '../users/entities/user.entity';
 import { PendingTransaction } from './entities/pending-transaction.entity';
-import { UnlockContentDto } from './dto/unlock-content.dto';
 import { ContentPricing } from '../content/entities/content-pricing.entity';
 import { EntitlementService } from '../entitlement/entitlement.service';
 import {
   UserContentEntitlement,
   EntitlementSource,
-  EntitlementContentScope, // --- [FIXED] Make sure this is imported
+  EntitlementContentScope,
 } from './entities/user-content-entitlement.entity';
+import { InitiatePurchaseDto } from './dto/initiate-purchase.dto';
+import { AccessType } from '../common/enums/access-type.enum'; // --- [FIXED] ---
 
 interface ChapaTransactionResponse {
   message: string;
@@ -68,10 +69,7 @@ export class PurchaseService {
     const splitPercentage = this.configService.get<number>('SKYLINK_SPLIT_PERCENTAGE');
 
     if (!secretKey || !domain || !subaccountId || !splitPercentage) {
-      this.logger.error('CRITICAL: One or more required environment variables are missing!');
-      throw new Error(
-        'Required env vars missing: CHAPA_SECRET_KEY, API_DOMAIN, SKYLINK_CHAPA_SUBACCOUNT_ID, SKYLINK_SPLIT_PERCENTAGE',
-      );
+      throw new Error('Required env vars missing: CHAPA_SECRET_KEY, API_DOMAIN, SKYLINK_CHAPA_SUBACCOUNT_ID, SKYLINK_SPLIT_PERCENTAGE');
     }
 
     this.chapaSecretKey = secretKey;
@@ -81,13 +79,9 @@ export class PurchaseService {
     this.logger.log('PurchaseService constructor: Environment variables loaded successfully.');
   }
 
-  async initiateUnlock(
-    userId: number,
-    contentId: string,
-    unlockContentDto: UnlockContentDto,
-  ) {
-    this.logger.log(`[initiateUnlock] UserID: ${userId}, ContentID: ${contentId}`);
-    const { accessType } = unlockContentDto;
+  async initiatePurchase(userId: number, initiatePurchaseDto: InitiatePurchaseDto) {
+    const { contentId, accessType } = initiatePurchaseDto;
+    this.logger.log(`[initiatePurchase] UserID: ${userId}, ContentID: ${contentId}, AccessType: ${accessType}`);
 
     const user = await this.userRepository.findOneBy({ id: userId });
     if (!user || !user.email) {
@@ -106,10 +100,12 @@ export class PurchaseService {
 
     const pricing = await this.pricingRepository.findOneBy({
       contentId,
+      accessType,
       isActive: true,
     });
+
     if (!content.isLocked || !pricing) {
-      throw new BadRequestException('This content is not available for purchase.');
+      throw new BadRequestException(`This content is not available for the specified purchase type.`);
     }
 
     const price = parseFloat(pricing.price.toString());
@@ -124,16 +120,11 @@ export class PurchaseService {
     const webhookUrl = `${this.apiDomain}/api/purchase/chapa-webhook`;
 
     const chapaRequestBody: any = {
-      amount: price.toString(),
-      currency: 'ETB',
-      email: user.email,
-      first_name: user.firstName || '',
-      last_name: user.lastName || '',
-      tx_ref: tx_ref,
-      callback_url: webhookUrl,
-      return_url: httpsReturnUrl,
-      'customization[title]': 'Al-Faruq Content Unlock',
-      'customization[description]': `Unlocking ${content.title}`,
+      amount: price.toString(), currency: 'ETB', email: user.email,
+      first_name: user.firstName || '', last_name: user.lastName || '',
+      tx_ref: tx_ref, callback_url: webhookUrl, return_url: httpsReturnUrl,
+      'customization[title]': 'Al-Faruq Content Purchase',
+      'customization[description]': `Access to ${content.title}`,
       splits: splits,
     };
 
@@ -151,12 +142,10 @@ export class PurchaseService {
       }
 
       const pendingTx = this.pendingTransactionRepository.create({
-        tx_ref,
-        userId,
-        contentId,
-        accessType,
+        tx_ref, userId, contentId,
+        accessType: accessType,
+        durationDays: pricing.durationDays,
         paymentType: PaymentType.UNLOCK,
-        // --- [FIXED] Cast to the correct enum type: EntitlementContentScope ---
         contentScope: content.type as unknown as EntitlementContentScope,
       });
       await this.pendingTransactionRepository.save(pendingTx);
@@ -164,7 +153,7 @@ export class PurchaseService {
       return { checkoutUrl: response.data.data.checkout_url };
     } catch (error) {
       const axiosError = error as { response?: AxiosResponse };
-      this.logger.error(`[initiateUnlock] Chapa Error:`, axiosError.response?.data || error.message);
+      this.logger.error(`[initiatePurchase] Chapa Error:`, axiosError.response?.data || error.message);
       throw new InternalServerErrorException('Could not initiate payment.');
     }
   }
@@ -175,13 +164,10 @@ export class PurchaseService {
       this.logger.warn('[verifyAndGrantAccess] No tx_ref provided.');
       return false;
     }
-    this.logger.log(`[verifyAndGrantAccess] Processing tx_ref: ${tx_ref}`);
-
     const pendingTx = await this.pendingTransactionRepository.findOneBy({ tx_ref });
     if (!pendingTx) {
       const existingPurchase = await this.purchaseRepository.findOneBy({ chapaTransactionId: tx_ref });
       if (existingPurchase) {
-        this.logger.log(`[verifyAndGrantAccess] Transaction ${tx_ref} already processed.`);
         return true;
       }
       this.logger.warn(`[verifyAndGrantAccess] Unknown or already processed tx_ref: ${tx_ref}.`);
@@ -197,52 +183,46 @@ export class PurchaseService {
       );
 
       if (verificationResponse.data.status !== 'success') {
-        this.logger.error(`[verifyAndGrantAccess] Chapa verification FAILED for ${tx_ref}.`);
         await this.pendingTransactionRepository.remove(pendingTx);
         return false;
       }
-      this.logger.log(`[verifyAndGrantAccess] Chapa verification SUCCESSFUL for ${tx_ref}.`);
 
-      const { userId, contentId, accessType, contentScope } = pendingTx;
+      const { userId, contentId, accessType, contentScope, durationDays } = pendingTx;
       const amount = verificationResponse.data.data?.amount ?? 0;
 
       const user = await this.userRepository.findOneBy({ id: userId });
       const content = await this.contentRepository.findOneBy({ id: contentId });
-      if (!user || !content) {
-        throw new Error(`Invalid user or content in pending TX ${tx_ref}`);
+      if (!user || !content) { throw new Error(`Invalid user or content in pending TX ${tx_ref}`); }
+
+      let expiresAt: Date | null = null;
+      if (accessType === AccessType.TEMPORARY && durationDays) { // --- [FIXED] ---
+        expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + durationDays);
       }
 
-      // 1. Create the Purchase record (as a transaction log)
       const newPurchase = this.purchaseRepository.create({
-        user,
-        content: content,
+        user, content,
         pricePaid: parseFloat(amount.toString()),
-        expiresAt: null, // Expiry is now handled by entitlements
+        expiresAt: expiresAt,
         chapaTransactionId: tx_ref,
         paymentType: pendingTx.paymentType,
         contentScope: contentScope as unknown as ContentScope,
         purchasedContentId: contentId,
       });
       await this.purchaseRepository.save(newPurchase);
-      this.logger.log(`[verifyAndGrantAccess] Purchase log created for ${tx_ref}`);
 
-      // 2. Create the UserContentEntitlement record (the actual access key)
       const newEntitlement = this.entitlementRepository.create({
-        userId,
-        contentId,
+        userId, contentId,
         contentType: contentScope,
         accessType,
         validFrom: new Date(),
-        validUntil: null, // For now, all unlocks are PERMANENT. This can be extended.
+        validUntil: expiresAt,
         source: EntitlementSource.TOP_UP,
         purchaseId: newPurchase.id,
       });
       await this.entitlementRepository.save(newEntitlement);
-      this.logger.log(`[verifyAndGrantAccess] Entitlement created for ${tx_ref}`);
 
-      // 3. Clean up
       await this.pendingTransactionRepository.remove(pendingTx);
-      this.logger.log(`SUCCESS: Access granted for ${tx_ref}`);
       return true;
     } catch (error) {
       const axiosError = error as { response?: AxiosResponse };

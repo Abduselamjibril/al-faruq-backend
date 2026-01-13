@@ -9,12 +9,12 @@ import {
   JoinColumn,
   ManyToOne,
   OneToMany,
-  OneToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-// --- [REMOVED] The 'PricingTier' import is no longer needed. ---
 import { Purchase } from '../../purchase/entities/purchase.entity';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ContentPricing } from './content-pricing.entity';
 
 export enum ContentType {
   MOVIE = 'MOVIE',
@@ -109,10 +109,15 @@ export class Content extends BaseEntity {
   @OneToMany(() => Content, (content) => content.parent)
   children: Content[];
 
-  // --- [REMOVED] The OneToOne relationship to PricingTier is now gone. ---
-
   @OneToMany(() => Purchase, (purchase) => purchase.content)
   purchases: Purchase[];
+
+  // --- [NEW] Optional property for API responses, not a DB column ---
+  @ApiPropertyOptional({
+    description: 'Available pricing options if the content is locked and not owned by the user.',
+    type: [ContentPricing],
+  })
+  pricingTiers?: ContentPricing[];
 
   @CreateDateColumn()
   createdAt: Date;

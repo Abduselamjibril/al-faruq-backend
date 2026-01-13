@@ -42,7 +42,7 @@ import { Public } from '../auth/decorators/public.decorator';
 import { PaginationQueryDto } from '../utils/pagination-query.dto';
 
 @ApiTags('Privacy Policy')
-@ApiBearerAuth()
+// @ApiBearerAuth() // <-- REMOVED FROM CONTROLLER LEVEL
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('privacy-policy')
 export class PrivacyPolicyController {
@@ -63,6 +63,7 @@ export class PrivacyPolicyController {
 
   // --- USER ENDPOINT ---
   @Post('accept')
+  @ApiBearerAuth() // <-- ADDED TO METHOD LEVEL
   @HttpCode(HttpStatus.OK)
   @Roles(RoleName.USER, RoleName.GUEST)
   @ApiOperation({ summary: 'User: Accept the current mandatory privacy policy' })
@@ -84,6 +85,7 @@ export class PrivacyPolicyController {
 
   // --- ADMIN ENDPOINTS ---
   @Post('admin')
+  @ApiBearerAuth() // <-- ADDED TO METHOD LEVEL
   @HttpCode(HttpStatus.CREATED)
   @Roles(RoleName.ADMIN)
   @UseInterceptors(FileInterceptor('file'))
@@ -141,6 +143,7 @@ export class PrivacyPolicyController {
   }
 
   @Get('admin')
+  @ApiBearerAuth() // <-- ADDED TO METHOD LEVEL
   @Roles(RoleName.ADMIN)
   @ApiOperation({ summary: 'Admin: Get all privacy policies' })
   @ApiResponse({ status: 200, description: 'List of all policies.' })
@@ -150,6 +153,7 @@ export class PrivacyPolicyController {
   }
 
   @Get('admin/:id/acceptances')
+  @ApiBearerAuth() // <-- ADDED TO METHOD LEVEL
   @Roles(RoleName.ADMIN)
   @ApiOperation({ summary: "Admin: Get a paginated list of a policy's acceptances" })
   @ApiResponse({ status: 200, description: 'Paginated list of acceptances.' })
@@ -163,6 +167,7 @@ export class PrivacyPolicyController {
   }
 
   @Patch('admin/:id/activate')
+  @ApiBearerAuth() // <-- ADDED TO METHOD LEVEL
   @HttpCode(HttpStatus.OK)
   @Roles(RoleName.ADMIN)
   @ApiOperation({ summary: 'Admin: Activate a policy (deactivates others)' })
@@ -174,6 +179,7 @@ export class PrivacyPolicyController {
   }
 
   @Patch('admin/:id/deactivate')
+  @ApiBearerAuth() // <-- ADDED TO METHOD LEVEL
   @HttpCode(HttpStatus.OK)
   @Roles(RoleName.ADMIN)
   @ApiOperation({ summary: 'Admin: Deactivate a policy' })
@@ -185,6 +191,7 @@ export class PrivacyPolicyController {
   }
 
   @Patch('admin/:id/make-mandatory')
+  @ApiBearerAuth() // <-- ADDED TO METHOD LEVEL
   @HttpCode(HttpStatus.OK)
   @Roles(RoleName.ADMIN)
   @ApiOperation({ summary: 'Admin: Make a policy mandatory (un-marks others)' })
@@ -196,6 +203,7 @@ export class PrivacyPolicyController {
   }
 
   @Patch('admin/:id/make-optional')
+  @ApiBearerAuth() // <-- ADDED TO METHOD LEVEL
   @HttpCode(HttpStatus.OK)
   @Roles(RoleName.ADMIN)
   @ApiOperation({ summary: 'Admin: Make a policy optional (not mandatory)' })

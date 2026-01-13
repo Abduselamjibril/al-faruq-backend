@@ -7,24 +7,25 @@ import { SeedService } from './database/seed.service';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import dataSource from './data-source';
 import { ConfigService } from '@nestjs/config';
+import { QuranSeederService } from './quran/quran-seeder.service'; // --- [NEW] IMPORT QURAN SEEDER SERVICE ---
 import { PolicyAcceptanceGuard } from './privacy-policy/guards/policy-acceptance.guard'; // --- [NEW] IMPORT GUARD ---
 import { PrivacyPolicyService } from './privacy-policy/privacy-policy.service'; // --- [NEW] IMPORT SERVICE ---
 
 async function bootstrap() {
   // --- RUN DATABASE MIGRATIONS ON STARTUP ---
-  try {
-    console.log('Initializing database connection for migrations...');
-    const db = await dataSource.initialize();
-    console.log('Database connection initialized. Running migrations...');
-    await db.runMigrations();
-    console.log('Migrations have been run successfully.');
-    await db.destroy();
-    console.log('Temporary database connection for migrations closed.');
-  } catch (error)
-  {
-    console.error('FATAL: Error running database migrations.', error);
-    process.exit(1);
-  }
+  // try {
+  //   console.log('Initializing database connection for migrations...');
+  //   const db = await dataSource.initialize();
+  //   console.log('Database connection initialized. Running migrations...');
+  //   await db.runMigrations();
+  //   console.log('Migrations have been run successfully.');
+  //   await db.destroy();
+  //   console.log('Temporary database connection for migrations closed.');
+  // } catch (error)
+  // {
+  //   console.error('FATAL: Error running database migrations.', error);
+  //   process.exit(1);
+  // }
   // --- END OF MIGRATIONS BLOCK ---
 
   const app = await NestFactory.create(AppModule);
@@ -83,6 +84,12 @@ async function bootstrap() {
   // The seeder is temporarily disabled to prevent the application from crashing on startup.
   // const seeder = app.get(SeedService);
   // await seeder.seedDatabase();
+  // --- AUTOMATIC SEEDING ON STARTUP (DISABLE AFTER FIRST RUN) ---
+  const seeder = app.get(SeedService);
+  const quranSeeder = app.get(QuranSeederService);
+  await seeder.seedDatabase();
+  await quranSeeder.seedQuranStructure();
+  // --- END OF AUTOMATIC SEEDING ---
 
   await app.listen(5000);
   console.log(`Application is now running on: ${await app.getUrl()}`);

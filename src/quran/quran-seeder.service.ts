@@ -22,7 +22,7 @@ export class QuranSeederService implements OnModuleInit {
     await this.seedQuranStructure();
   }
 
-  private async seedQuranStructure() {
+  public async seedQuranStructure() {
     this.logger.log('Checking if Quran structure needs to be seeded...');
     const juzCount = await this.juzRepository.count();
 
