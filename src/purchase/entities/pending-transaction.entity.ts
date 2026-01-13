@@ -10,7 +10,7 @@ import {
 } from 'typeorm';
 import { EntitlementContentScope } from './user-content-entitlement.entity';
 import { PaymentType } from './purchase.entity';
-import { AccessType } from '../../common/enums/access-type.enum'; // --- [FIXED] ---
+import { AccessType } from '../../common/enums/access-type.enum';
 
 @Entity()
 export class PendingTransaction extends BaseEntity {
@@ -20,8 +20,8 @@ export class PendingTransaction extends BaseEntity {
   @Column({ type: 'integer', nullable: true })
   durationDays: number | null;
 
-  @Column({ type: 'integer' })
-  userId: number;
+  @Column({ type: 'uuid' })
+  userId: string;
 
   @Column({ type: 'uuid' })
   contentId: string;
@@ -41,7 +41,7 @@ export class PendingTransaction extends BaseEntity {
 
   @Column({
     type: 'enum',
-    enum: AccessType, // --- [FIXED] ---
+    enum: AccessType,
   })
   accessType: AccessType;
 

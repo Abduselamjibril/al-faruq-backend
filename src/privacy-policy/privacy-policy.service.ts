@@ -37,7 +37,7 @@ export class PrivacyPolicyService {
   async create(
     createDto: CreatePrivacyPolicyDto,
     file: Express.Multer.File,
-    adminId: number,
+    adminId: string,
   ): Promise<PrivacyPolicy> {
     const existingVersion = await this.privacyPolicyRepository.findOneBy({
       version: createDto.version,
@@ -99,8 +99,6 @@ export class PrivacyPolicyService {
     }
   }
 
-  // --- METHODS FOR ADMIN MANAGEMENT ---
-
   async findAllForAdmin(): Promise<PrivacyPolicy[]> {
     return this.privacyPolicyRepository.find({
       order: {
@@ -123,22 +121,18 @@ export class PrivacyPolicyService {
     return this._updatePolicyStatus(policyId, 'isMandatory', isMandatory);
   }
 
-  // --- [NEW] ADMIN AUDIT METHOD ---
-  /**
-   * (Admin) Retrieves a paginated list of acceptances for a specific policy.
-   */
   async getAcceptancesForPolicy(
     policyId: number,
     paginationDto: PaginationQueryDto,
   ): Promise<PaginationResponseDto<UserPrivacyPolicyAcceptance>> {
-    await this._findPolicyById(policyId); // Ensure policy exists
+    await this._findPolicyById(policyId);
 
     const { page = 1, limit = 10 } = paginationDto;
     const skip = (page - 1) * limit;
 
     const [data, totalItems] = await this.acceptanceRepository.findAndCount({
       where: { privacyPolicy: { id: policyId } },
-      relations: ['user'], // Eager load the user details
+      relations: ['user'],
       take: limit,
       skip: skip,
       order: {
@@ -157,10 +151,8 @@ export class PrivacyPolicyService {
     });
   }
 
-  // --- METHODS FOR USER ACCEPTANCE LOGIC ---
-
   async recordAcceptance(
-    userId: number,
+    userId: string,
     acceptDto: AcceptPrivacyPolicyDto,
     ipAddress: string,
   ): Promise<UserPrivacyPolicyAcceptance> {
@@ -200,7 +192,7 @@ export class PrivacyPolicyService {
   }
 
   async hasUserAcceptedPolicy(
-    userId: number,
+    userId: string,
     policyId: number,
   ): Promise<boolean> {
     const count = await this.acceptanceRepository.count({
@@ -212,7 +204,7 @@ export class PrivacyPolicyService {
     return count > 0;
   }
 
-  async checkIfAcceptanceIsRequired(userId: number): Promise<boolean> {
+  async checkIfAcceptanceIsRequired(userId: string): Promise<boolean> {
     const mandatoryPolicy = await this.getCurrentMandatoryPolicy();
     if (!mandatoryPolicy) {
       return false;
@@ -233,8 +225,6 @@ export class PrivacyPolicyService {
     }
     return activePolicy;
   }
-
-  // --- PRIVATE HELPERS ---
 
   private async _findPolicyById(policyId: number): Promise<PrivacyPolicy> {
     const policy = await this.privacyPolicyRepository.findOneBy({ id: policyId });

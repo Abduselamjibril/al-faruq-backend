@@ -26,15 +26,10 @@ export class NotificationsService {
     private readonly firebaseService: FirebaseService,
   ) {}
 
-  // ================================================================= //
-  //                      USER-SPECIFIC METHODS                      //
-  // ================================================================= //
-
   async getNotificationsForUser(
-    userId: number,
+    userId: string,
     paginationQuery: PaginationQueryDto,
   ): Promise<PaginationResponseDto<any>> {
-    // --- THE FIX IS HERE: Provide default values to satisfy TypeScript ---
     const { page = 1, limit = 10 } = paginationQuery;
     const skip = (page - 1) * limit;
 
@@ -57,13 +52,13 @@ export class NotificationsService {
       await queryBuilder.getManyAndCount();
 
     const data = paginatedNotifications.map((notification) => {
-      const status = notification.userStatuses[0]; // Will be undefined or the user's specific status
+      const status = notification.userStatuses[0];
       return {
         id: notification.id,
         title: notification.title,
         message: notification.message,
         sentAt: notification.sentAt,
-        isRead: status ? status.isRead : false, // Default to unread if no status exists
+        isRead: status ? status.isRead : false,
       };
     });
 
@@ -78,7 +73,7 @@ export class NotificationsService {
   }
 
   async markNotificationAsRead(
-    userId: number,
+    userId: string,
     notificationId: number,
   ): Promise<void> {
     await this.userNotificationStatusRepository.save({
@@ -92,7 +87,7 @@ export class NotificationsService {
   }
 
   async clearNotificationForUser(
-    userId: number,
+    userId: string,
     notificationId: number,
   ): Promise<void> {
     await this.userNotificationStatusRepository.save({
@@ -106,7 +101,7 @@ export class NotificationsService {
     );
   }
 
-  async clearAllNotificationsForUser(userId: number): Promise<void> {
+  async clearAllNotificationsForUser(userId: string): Promise<void> {
     const allNotifications = await this.notificationRepository.find({
       select: ['id'],
     });
@@ -126,29 +121,21 @@ export class NotificationsService {
     this.logger.log(`Cleared all notifications for user ${userId}`);
   }
 
-  // ================================================================= //
-  //                        ADMIN-ONLY METHODS                       //
-  // ================================================================= //
-
   async sendBroadcastNotification(
     title: string,
     message: string,
   ): Promise<void> {
     this.logger.log(`Initiating broadcast notification: "${title}"`);
-
     const allTokens = await this.devicesService.findAllTokens();
     if (allTokens.length === 0) {
       this.logger.warn('No device tokens found. Aborting broadcast.');
       return;
     }
-
     const tokenChunks: string[][] = [];
     for (let i = 0; i < allTokens.length; i += 500) {
       tokenChunks.push(allTokens.slice(i, i + 500));
     }
-
     let allStaleTokens: string[] = [];
-
     for (const chunk of tokenChunks) {
       this.logger.log(
         `Sending broadcast to a chunk of ${chunk.length} tokens.`,
@@ -162,17 +149,14 @@ export class NotificationsService {
         allStaleTokens = [...allStaleTokens, ...staleTokensInChunk];
       }
     }
-
     if (allStaleTokens.length > 0) {
       await this.devicesService.deleteTokens(allStaleTokens);
     }
-
     const newNotification = this.notificationRepository.create({
       title,
       message,
     });
     await this.notificationRepository.save(newNotification);
-
     this.logger.log('Broadcast notification process completed.');
   }
 
@@ -186,7 +170,6 @@ export class NotificationsService {
 
   async deleteNotification(id: number): Promise<void> {
     const result = await this.notificationRepository.delete(id);
-
     if (result.affected === 0) {
       throw new NotFoundException(`Notification with ID ${id} not found.`);
     }

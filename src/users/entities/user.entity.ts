@@ -1,4 +1,6 @@
-import { Exclude, Expose } from 'class-transformer'; // 🟢 ADDED Expose
+// src/users/entities/user.entity.ts
+
+import { Exclude, Expose } from 'class-transformer';
 import {
   Column,
   Entity,
@@ -22,8 +24,8 @@ export enum AuthProvider {
 
 @Entity()
 export class User {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column({ type: 'varchar', nullable: true })
   firstName: string | null;
@@ -41,7 +43,6 @@ export class User {
   @Exclude()
   password: string | null;
 
-  // 🟢 NEW VIRTUAL PROPERTY
   @Expose()
   get hasPassword(): boolean {
     return !!this.password;
@@ -78,21 +79,15 @@ export class User {
   @OneToMany(() => Purchase, (purchase) => purchase.user)
   purchases: Purchase[];
 
-
   @OneToMany(() => Device, (device) => device.user)
   devices: Device[];
 
   @OneToMany(() => UserSession, (session) => session.user)
   userSessions: UserSession[];
 
-  // --- NEW NOTIFICATION STATUS RELATIONSHIP ADDED BELOW ---
-  @OneToMany(
-    () => UserNotificationStatus,
-    (status) => status.user,
-  )
+  @OneToMany(() => UserNotificationStatus, (status) => status.user)
   notificationStatuses: UserNotificationStatus[];
 
-    // User bookmarks relation
-    @OneToMany(() => Bookmark, (bookmark: Bookmark) => bookmark.user)
-    bookmarks: Bookmark[];
+  @OneToMany(() => Bookmark, (bookmark: Bookmark) => bookmark.user)
+  bookmarks: Bookmark[];
 }

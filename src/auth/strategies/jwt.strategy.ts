@@ -4,7 +4,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PassportStrategy } from '@nestjs/passport';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { RoleName } from '../../roles/entities/role.entity'; // <-- 1. IMPORT RoleName
+import { RoleName } from '../../roles/entities/role.entity';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -16,9 +16,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  // --- VALIDATE METHOD UPDATED HERE ---
-  async validate(payload: { sub: number; email: string; role: RoleName }) {
-    // 2. UPDATE PAYLOAD SIGNATURE
-    return { id: payload.sub, email: payload.email, role: payload.role }; // 3. RETURN ROLE
+  async validate(payload: { sub: string; email: string; role: RoleName }) {
+    return { id: payload.sub, email: payload.email, role: payload.role };
   }
 }

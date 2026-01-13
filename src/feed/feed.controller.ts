@@ -36,7 +36,6 @@ export const GetUser = createParamDecorator(
 @ApiTags('Feed (User-Facing)')
 @Controller('feed')
 export class FeedController {
-  // --- [CHANGED] Only inject FeedService ---
   constructor(private readonly feedService: FeedService) {}
 
   @ApiBearerAuth()
@@ -48,13 +47,12 @@ export class FeedController {
   })
   @ApiResponse({ status: 200, description: 'Returns a paginated and personalized list of top-level content items.', type: PaginationResponseDto })
   getFeed(
-    @GetUser() user: { id: number },
+    @GetUser() user: { id: string },
     @Query() query: FeedQueryDto,
   ): Promise<PaginationResponseDto<Content>> {
     return this.feedService.getFeed(user.id, query);
   }
 
-  // --- [RESTORED] Renamed back to my-purchases ---
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(RoleName.USER)
@@ -64,13 +62,11 @@ export class FeedController {
   })
   @ApiResponse({ status: 200, description: 'Returns a paginated list of content items for which the user has an active entitlement.', type: PaginationResponseDto })
   getMyPurchases(
-    @GetUser() user: { id: number },
+    @GetUser() user: { id: string },
     @Query() query: FeedQueryDto,
   ): Promise<PaginationResponseDto<Content>> {
     return this.feedService.getMyPurchases(user.id, query);
   }
-
-  // --- [REMOVED] The separate '/:id/access' endpoint is gone. ---
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -81,7 +77,7 @@ export class FeedController {
   @ApiResponse({ status: 404, description: 'Content with the specified ID not found.' })
   getContent(
     @Param('id', ParseUUIDPipe) id: string,
-    @GetUser() user: { id: number },
+    @GetUser() user: { id: string },
   ) {
     return this.feedService.getContentForUser(id, user.id);
   }

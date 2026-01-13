@@ -1,3 +1,5 @@
+// src/users/users.service.ts
+
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ILike, Repository } from 'typeorm';
@@ -19,7 +21,7 @@ export class UsersService {
     return (
       (await this.usersRepository.findOne({
         where: { email: ILike(email) },
-        relations: ['role'], // <--- ADDED THIS to load role data
+        relations: ['role'],
       })) ?? undefined
     );
   }
@@ -28,16 +30,16 @@ export class UsersService {
     return (
       (await this.usersRepository.findOne({
         where: { phoneNumber },
-        relations: ['role'], // <--- ADDED THIS to load role data
+        relations: ['role'],
       })) ?? undefined
     );
   }
 
-  async findById(id: number): Promise<User | undefined> {
+  async findById(id: string): Promise<User | undefined> {
     return (
       (await this.usersRepository.findOne({
         where: { id },
-        relations: ['role'], // <--- ADDED THIS to load role data
+        relations: ['role'],
       })) ?? undefined
     );
   }
@@ -57,7 +59,7 @@ export class UsersService {
     return (
       (await this.usersRepository.findOne({
         where: whereCondition,
-        relations: ['role'], // <--- ADDED THIS to load role data
+        relations: ['role'],
       })) ?? undefined
     );
   }
@@ -70,7 +72,7 @@ export class UsersService {
     return this.findByPhoneNumber(identifier);
   }
 
-  async update(id: number, attrs: Partial<User>): Promise<User> {
+  async update(id: string, attrs: Partial<User>): Promise<User> {
     const user = await this.findById(id);
     if (!user) {
       throw new NotFoundException('User not found');
@@ -82,33 +84,32 @@ export class UsersService {
   async findAll(): Promise<User[]> {
     return this.usersRepository.find({
       order: {
-        id: 'ASC',
+        // Cannot order by UUID directly like this, ordering by creation date is better
+        email: 'ASC', // Changed to a deterministic order field
       },
-      relations: ['role'], // Good practice to include role in list
+      relations: ['role'],
     });
   }
 
-  async remove(id: number): Promise<void> {
+  async remove(id: string): Promise<void> {
     const result = await this.usersRepository.delete(id);
     if (result.affected === 0) {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
   }
 
-  // --- NEW METHOD FOR SEARCHING USERS ---
   async search(term: string): Promise<User[]> {
     return this.usersRepository.find({
       where: [
-        // The search term will be matched against these four fields
         { firstName: ILike(`%${term}%`) },
         { lastName: ILike(`%${term}%`) },
         { email: ILike(`%${term}%`) },
         { phoneNumber: ILike(`%${term}%`) },
       ],
       order: {
-        id: 'ASC',
+        email: 'ASC', // Changed to a deterministic order field
       },
-      relations: ['role'], // Include role in search results too
+      relations: ['role'],
     });
   }
 }

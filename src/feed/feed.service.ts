@@ -23,7 +23,7 @@ export class FeedService {
   ) {}
 
   async getFeed(
-    userId: number,
+    userId: string,
     query: FeedQueryDto,
   ): Promise<PaginationResponseDto<Content>> {
     const { page, limit, category, author, genre, year } = query;
@@ -88,7 +88,7 @@ export class FeedService {
     return new PaginationResponseDto(results, meta);
   }
 
-  async getMyPurchases(userId: number, query: FeedQueryDto): Promise<PaginationResponseDto<Content>> {
+  async getMyPurchases(userId: string, query: FeedQueryDto): Promise<PaginationResponseDto<Content>> {
     const { page, limit, category, author, genre, year } = query;
     const take = limit || 10;
     const skip = ((page || 1) - 1) * take;
@@ -119,7 +119,7 @@ export class FeedService {
     return new PaginationResponseDto(accessibleContent, { totalItems: total, itemCount: accessibleContent.length, itemsPerPage: take, totalPages, currentPage: page || 1 });
   }
 
-  async getContentForUser(contentId: string, userId: number): Promise<Content> {
+  async getContentForUser(contentId: string, userId: string): Promise<Content> {
     const qb = this.contentRepository.createQueryBuilder('content');
     qb.leftJoinAndSelect('content.children', 'seasonsOrEpisodes')
       .leftJoinAndSelect('seasonsOrEpisodes.children', 'episodes')
@@ -131,11 +131,9 @@ export class FeedService {
       throw new NotFoundException(`Content with ID ${contentId} not found.`);
     }
 
-    // --- [NEW] Fetch all of the user's entitlements for efficient checking ---
     const userEntitlements = await this.entitlementRepository.find({ where: { userId } });
     const entitledContentIds = new Set(userEntitlements.map(e => e.contentId));
     
-    // --- [NEW] Fetch all relevant pricing in one go for efficiency ---
     const allIdsInHierarchy = this._getIdsFromHierarchy(content);
     const allPricing = await this.pricingRepository.find({
       where: { contentId: In(allIdsInHierarchy), isActive: true },
@@ -147,30 +145,26 @@ export class FeedService {
         pricingMap.set(p.contentId, tiers);
     });
 
-    // --- [NEW] Start the recursive processing ---
     await this._processContentNode(content, entitledContentIds, pricingMap);
 
     return content;
   }
 
-  // --- [NEW] Recursive helper method ---
   private async _processContentNode(
     node: Content,
     entitledContentIds: Set<string>,
     pricingMap: Map<string, ContentPricing[]>
   ) {
-    // Check if user has access via this node OR any parent (already included in the set)
     const hasAccess = await this.entitlementService.checkUserAccess(
-      -1, // We pass -1 for userId as we are checking against a pre-fetched set
+      '', // We pass an empty string now as we are checking against a pre-fetched set
       node.id,
-      entitledContentIds, // Pass the pre-fetched set for efficiency
+      entitledContentIds,
     );
     
     if (node.isLocked) {
       if (hasAccess) {
         node.isLocked = false;
       } else {
-        // Redact URLs and attach pricing
         node.videoUrl = null;
         node.audioUrl = null;
         node.pdfUrl = null;
@@ -179,7 +173,6 @@ export class FeedService {
       }
     }
     
-    // Recursively process children
     if (node.children && node.children.length > 0) {
       for (const child of node.children) {
         await this._processContentNode(child, entitledContentIds, pricingMap);
@@ -187,7 +180,6 @@ export class FeedService {
     }
   }
   
-  // --- [NEW] Helper to get all IDs in the tree ---
   private _getIdsFromHierarchy(root: Content): string[] {
       const ids: string[] = [root.id];
       if (root.children && root.children.length > 0) {

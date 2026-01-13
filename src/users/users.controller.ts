@@ -1,15 +1,17 @@
+// src/users/users.controller.ts
+
 import {
-  ClassSerializerInterceptor, // <--- IMPORT THIS
+  ClassSerializerInterceptor,
   Controller,
   Delete,
   Get,
   HttpCode,
   HttpStatus,
   Param,
-  ParseIntPipe,
+  ParseUUIDPipe, // IMPORTANT: Import ParseUUIDPipe
   Query,
   UseGuards,
-  UseInterceptors, // <--- IMPORT THIS
+  UseInterceptors,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -28,7 +30,7 @@ import { UsersService } from './users.service';
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(RoleName.ADMIN)
-@UseInterceptors(ClassSerializerInterceptor) // <--- CRITICAL ADDITION
+@UseInterceptors(ClassSerializerInterceptor)
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
@@ -41,7 +43,6 @@ export class UsersController {
     return this.usersService.findAll();
   }
 
-  // --- NEW SEARCH ENDPOINT ---
   @Get('search')
   @ApiOperation({ summary: 'Search for users by name, email, or phone number' })
   @ApiQuery({ name: 'term', required: true, description: 'The search term to look for.' })
@@ -50,7 +51,6 @@ export class UsersController {
   search(@Query('term') term: string) {
     return this.usersService.search(term);
   }
-  // --- END OF NEW ENDPOINT ---
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -58,7 +58,7 @@ export class UsersController {
   @ApiResponse({ status: 204, description: 'User successfully deleted.' })
   @ApiResponse({ status: 404, description: 'User with the specified ID not found.' })
   @ApiResponse({ status: 403, description: 'Forbidden.' })
-  remove(@Param('id', ParseIntPipe) id: number) {
+  remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.usersService.remove(id);
   }
 }

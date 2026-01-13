@@ -1,3 +1,5 @@
+// src/auth/auth.controller.ts
+
 import {
   Body,
   Controller,
@@ -41,6 +43,7 @@ import { LoginUserDto } from './dto/login-user.dto';
 import { ChangeAdminCredentialsDto } from './dto/change-admin-credentials.dto';
 import { GoogleMobileLoginDto } from './dto/google-mobile-login.dto';
 import { SetPasswordDto } from './dto/set-password.dto';
+import { ForceLogoutDto } from './dto/force-logout.dto'; // IMPORTANT: Import the new DTO
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -79,12 +82,10 @@ export class AuthController {
   @UseGuards(LocalAuthGuard)
   @Post('login')
   async login(@Request() req, @Body() _loginDto: LoginUserDto) {
-    // Check device limit BEFORE logging in
     await this.authService.checkDeviceLimit(req.user.id);
     return this.authService.login(req.user);
   }
 
-  // --- LOGOUT ENDPOINT ---
   @ApiOperation({ summary: 'Logout and deactivate a session' })
   @ApiResponse({ status: 200, description: 'Session logged out successfully.' })
   @ApiResponse({ status: 400, description: 'Invalid session ID.' })
@@ -107,7 +108,6 @@ export class AuthController {
     return { message: 'Logged out successfully.' };
   }
 
-  // --- MOBILE GOOGLE LOGIN ---
   @ApiOperation({ summary: 'Login with Google ID Token (Mobile)' })
   @ApiResponse({ status: 200, description: 'Login successful, returns JWT.' })
   @ApiResponse({ status: 401, description: 'Invalid Token.' })
@@ -203,7 +203,6 @@ export class AuthController {
     return { message: 'Password changed successfully.' };
   }
 
-  // --- NEW ENDPOINT FOR SSO USERS ---
   @ApiOperation({
     summary: 'Set password for SSO users who have no password (User Only)',
   })
@@ -256,8 +255,6 @@ export class AuthController {
     return { message: 'User account successfully deleted.' };
   }
 
-  // --- ADMIN-ONLY ENDPOINTS ---
-
   @Get('admin/profile')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(RoleName.ADMIN)
@@ -294,31 +291,18 @@ export class AuthController {
     );
   }
 
-  // --- NEW: Force Logout All Sessions for a User ---
   @ApiOperation({ summary: 'Admin: Force logout all sessions for a user' })
   @ApiBearerAuth()
   @ApiResponse({ status: 200, description: 'All sessions cleared for user.' })
   @ApiResponse({ status: 403, description: 'Forbidden.' })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        userId: { type: 'integer', example: 1 },
-      },
-      required: ['userId'],
-    },
-  })
+  @ApiBody({ type: ForceLogoutDto }) // Use the new DTO for Swagger docs
   @Post('admin/force-logout')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(RoleName.ADMIN)
-  async forceLogoutAll(@Body() body: { userId: number }) {
-    if (!body.userId) {
-      throw new BadRequestException('User ID is required.');
-    }
+  async forceLogoutAll(@Body() body: ForceLogoutDto) { // Use the new DTO for validation
     await this.authService.forceLogoutAllSessions(body.userId);
     return { message: 'All sessions for user have been logged out.' };
   }
-  // --------------------------------------------------
 
   @ApiOperation({ summary: 'Get a guest token (no credentials required)' })
   @ApiResponse({

@@ -1,6 +1,6 @@
 // src/notifications/entities/user-notification-status.entity.ts
 
-import { User } from '../../users/entities/user.entity'; // Assumes user entity path
+import { User } from '../../users/entities/user.entity';
 import {
   Column,
   Entity,
@@ -12,8 +12,8 @@ import { Notification } from './notification.entity';
 
 @Entity('user_notification_statuses')
 export class UserNotificationStatus {
-  @PrimaryColumn({ name: 'user_id' })
-  userId: number;
+  @PrimaryColumn({ name: 'user_id', type: 'uuid' })
+  userId: string;
 
   @PrimaryColumn({ name: 'notification_id' })
   notificationId: number;

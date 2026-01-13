@@ -21,13 +21,13 @@ export class EntitlementService {
 
   /**
    * Overloaded method. Checks access by either querying the DB or checking a pre-fetched set of IDs.
-   * @param userId The ID of the user. Pass -1 if using the pre-fetched set.
+   * @param userId The ID of the user. Pass an empty string if using the pre-fetched set.
    * @param contentId The ID of the content the user wants to access.
    * @param entitledContentIds (Optional) A pre-fetched Set of content IDs the user is entitled to.
    * @returns The valid entitlement record if access is granted, otherwise null.
    */
   async checkUserAccess(
-    userId: number,
+    userId: string,
     contentId: string,
     entitledContentIds?: Set<string>,
   ): Promise<UserContentEntitlement | boolean | null> {
@@ -85,7 +85,7 @@ export class EntitlementService {
     const expiredEntitlements = await this.entitlementRepository.find({
       where: {
         accessType: AccessType.TEMPORARY,
-        validUntil: LessThan(now), // --- [FIXED] Corrected logic to find expired items.
+        validUntil: LessThan(now),
       },
     });
 

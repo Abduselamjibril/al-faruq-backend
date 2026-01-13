@@ -1,3 +1,5 @@
+// src/devices/devices.service.ts
+
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -34,25 +36,23 @@ export class DevicesService {
     }
   }
 
-  async deleteDevice(fcmToken: string, userId: number): Promise<void> {
+  async deleteDevice(fcmToken: string, userId: string): Promise<void> {
     this.logger.log(`Deleting FCM Token for user ID: ${userId}`);
     await this.deviceRepository.delete({ fcmToken, user: { id: userId } });
   }
 
-  async findTokensByUserId(userId: number): Promise<string[]> {
+  async findTokensByUserId(userId: string): Promise<string[]> {
     const devices = await this.deviceRepository.find({
       where: { user: { id: userId } },
     });
     return devices.map((device) => device.fcmToken);
   }
 
-  // --- NEW METHOD TO EFFICIENTLY COUNT DEVICES FOR A USER ---
-  async countByUserId(userId: number): Promise<number> {
+  async countByUserId(userId: string): Promise<number> {
     return this.deviceRepository.count({
       where: { user: { id: userId } },
     });
   }
-  // --- END OF NEW METHOD ---
 
   async findAllTokens(): Promise<string[]> {
     const devices = await this.deviceRepository.find();

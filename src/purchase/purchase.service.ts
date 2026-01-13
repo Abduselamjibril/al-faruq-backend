@@ -26,7 +26,7 @@ import {
   EntitlementContentScope,
 } from './entities/user-content-entitlement.entity';
 import { InitiatePurchaseDto } from './dto/initiate-purchase.dto';
-import { AccessType } from '../common/enums/access-type.enum'; // --- [FIXED] ---
+import { AccessType } from '../common/enums/access-type.enum';
 
 interface ChapaTransactionResponse {
   message: string;
@@ -79,7 +79,7 @@ export class PurchaseService {
     this.logger.log('PurchaseService constructor: Environment variables loaded successfully.');
   }
 
-  async initiatePurchase(userId: number, initiatePurchaseDto: InitiatePurchaseDto) {
+  async initiatePurchase(userId: string, initiatePurchaseDto: InitiatePurchaseDto) {
     const { contentId, accessType } = initiatePurchaseDto;
     this.logger.log(`[initiatePurchase] UserID: ${userId}, ContentID: ${contentId}, AccessType: ${accessType}`);
 
@@ -195,7 +195,7 @@ export class PurchaseService {
       if (!user || !content) { throw new Error(`Invalid user or content in pending TX ${tx_ref}`); }
 
       let expiresAt: Date | null = null;
-      if (accessType === AccessType.TEMPORARY && durationDays) { // --- [FIXED] ---
+      if (accessType === AccessType.TEMPORARY && durationDays) {
         expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + durationDays);
       }

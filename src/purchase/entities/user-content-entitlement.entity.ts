@@ -8,9 +8,7 @@ import {
   Index,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import { AccessType } from '../../common/enums/access-type.enum'; // --- [CHANGED] ---
-
-// --- [REMOVED] The local enum is no longer needed here.
+import { AccessType } from '../../common/enums/access-type.enum';
 
 export enum EntitlementSource {
   SUBSCRIPTION = 'SUBSCRIPTION',
@@ -34,8 +32,8 @@ export class UserContentEntitlement extends BaseEntity {
   id: string;
 
   @Index()
-  @Column({ type: 'integer' })
-  userId: number;
+  @Column({ type: 'uuid' })
+  userId: string;
 
   @Column({
     type: 'enum',
@@ -49,7 +47,7 @@ export class UserContentEntitlement extends BaseEntity {
 
   @Column({
     type: 'enum',
-    enum: AccessType, // --- [CHANGED] ---
+    enum: AccessType,
   })
   accessType: AccessType;
 

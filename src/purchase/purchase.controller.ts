@@ -4,7 +4,6 @@ import {
   Controller,
   Post,
   Body,
-  Req,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -14,6 +13,7 @@ import {
   Get,
   Query,
   Res,
+  Req,
 } from '@nestjs/common';
 import { PurchaseService } from './purchase.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -30,7 +30,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RoleName } from '../roles/entities/role.entity';
 import type { Response } from 'express';
-import { InitiatePurchaseDto } from './dto/initiate-purchase.dto'; // --- [CHANGED] ---
+import { InitiatePurchaseDto } from './dto/initiate-purchase.dto';
 
 export const GetUser = createParamDecorator(
   (data: unknown, ctx: ExecutionContext) => {
@@ -44,7 +44,6 @@ export const GetUser = createParamDecorator(
 export class PurchaseController {
   constructor(private readonly purchaseService: PurchaseService) {}
 
-  // --- [RESTORED] The endpoint is now '/initiate' ---
   @Post('initiate')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(RoleName.USER)
@@ -57,7 +56,7 @@ export class PurchaseController {
   @ApiResponse({ status: 400, description: 'Bad Request. Invalid duration or user already has access.' })
   @ApiResponse({ status: 404, description: 'Not Found. The specified user or content does not exist.' })
   initiatePurchase(
-    @GetUser() user: { id: number },
+    @GetUser() user: { id: string },
     @Body() initiatePurchaseDto: InitiatePurchaseDto,
   ): Promise<InitiatePurchaseResponseDto> {
     return this.purchaseService.initiatePurchase(user.id, initiatePurchaseDto);
