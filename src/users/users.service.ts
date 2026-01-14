@@ -21,7 +21,7 @@ export class UsersService {
     return (
       (await this.usersRepository.findOne({
         where: { email: ILike(email) },
-        relations: ['role'],
+        relations: ['roles'],
       })) ?? undefined
     );
   }
@@ -30,7 +30,7 @@ export class UsersService {
     return (
       (await this.usersRepository.findOne({
         where: { phoneNumber },
-        relations: ['role'],
+        relations: ['roles'],
       })) ?? undefined
     );
   }
@@ -39,7 +39,7 @@ export class UsersService {
     return (
       (await this.usersRepository.findOne({
         where: { id },
-        relations: ['role'],
+        relations: ['roles'],
       })) ?? undefined
     );
   }
@@ -59,7 +59,7 @@ export class UsersService {
     return (
       (await this.usersRepository.findOne({
         where: whereCondition,
-        relations: ['role'],
+        relations: ['roles'],
       })) ?? undefined
     );
   }
@@ -87,7 +87,7 @@ export class UsersService {
         // Cannot order by UUID directly like this, ordering by creation date is better
         email: 'ASC', // Changed to a deterministic order field
       },
-      relations: ['role'],
+      relations: ['roles'],
     });
   }
 
@@ -109,7 +109,7 @@ export class UsersService {
       order: {
         email: 'ASC', // Changed to a deterministic order field
       },
-      relations: ['role'],
+      relations: ['roles'],
     });
   }
 }
