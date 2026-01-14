@@ -168,7 +168,7 @@ export class AuthService {
       email: lowercasedEmail,
       firstName: profile.firstName,
       lastName: profile.lastName,
-      role: defaultRole,
+      roles: [defaultRole],
       agreedToTerms: true,
       authProvider:
         profile.provider === 'google'
@@ -193,15 +193,16 @@ export class AuthService {
         email: 'guest@guest.local',
         firstName: 'Guest',
         lastName: 'User',
-        role: guestRole,
+        roles: [guestRole],
         agreedToTerms: false,
         authProvider: AuthProvider.LOCAL,
         password: null,
       });
       this.logger.log('Created new guest user.');
-    } else if (guestUser.role?.name !== RoleName.GUEST) {
-      guestUser = await this.usersService.update(guestUser.id, { role: guestRole });
-      this.logger.log('Updated guest user to GUEST role.');
+    } else if (!guestUser.roles.some(r => r.name === RoleName.GUEST)) {
+        guestUser.roles.push(guestRole);
+        guestUser = await this.usersService.update(guestUser.id, { roles: guestUser.roles });
+        this.logger.log('Added GUEST role to existing guest user.');
     }
     this.logger.log(`Guest token requested. userId=${guestUser.id}`);
     return this.login(guestUser);
@@ -235,7 +236,7 @@ export class AuthService {
         email: lowercasedEmail,
         password: hashedPassword,
         authProvider: AuthProvider.LOCAL,
-        role: defaultRole,
+        roles: [defaultRole],
       });
       return user;
     } catch (error) {
@@ -253,7 +254,8 @@ export class AuthService {
   }
 
   async login(user: User) {
-    if (user.role?.name === RoleName.USER) {
+    const isUserRole = user.roles.some(role => role.name === RoleName.USER);
+    if (isUserRole) {
       const activeSessions = await this.userSessionRepository.count({
         where: { user: { id: user.id }, active: true },
       });
@@ -266,10 +268,10 @@ export class AuthService {
       }
     }
 
+    const isAdmin = user.roles.some(role => role.name === RoleName.ADMIN);
     const mandatoryPolicy = await this.privacyPolicyService.getCurrentMandatoryPolicy();
     let requiresAcceptance = false;
-    if (mandatoryPolicy && user.role?.name !== RoleName.ADMIN) {
-      // Assuming user.id is now a string, but hasUserAcceptedPolicy might expect number for policyId
+    if (mandatoryPolicy && !isAdmin) {
       requiresAcceptance = !(await this.privacyPolicyService.hasUserAcceptedPolicy(
         user.id,
         mandatoryPolicy.id,
@@ -283,10 +285,18 @@ export class AuthService {
     await this.userSessionRepository.save(session);
     this.logger.log(`Session created: userId=${user.id}, sessionId=${session.id}`);
 
+    // Flatten permissions from all roles into a single array of strings
+    const permissions = user.roles.reduce((acc, role) => {
+        const rolePermissions = role.permissions ? role.permissions.map(p => p.name) : [];
+        return [...acc, ...rolePermissions];
+    }, [] as string[]);
+    const uniquePermissions = [...new Set(permissions)];
+    
     const payload = {
       email: user.email,
       sub: user.id,
-      role: user.role.name,
+      roles: user.roles.map(role => role.name),
+      permissions: uniquePermissions,
     };
 
     return {
@@ -317,7 +327,7 @@ export class AuthService {
       return;
     }
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
     const hashedOtp = await bcrypt.hash(otp, 10);
     await this.usersService.update(user.id, { otp: hashedOtp, otpExpiresAt });
     await this.mailService.sendPasswordResetOTP(user, otp);

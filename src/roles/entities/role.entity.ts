@@ -1,23 +1,41 @@
 // src/roles/entities/role.entity.ts
 
 import { User } from '../../users/entities/user.entity';
-import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
-
+import { Permission } from '../../permissions/entities/permission.entity';
+import {
+  Column,
+  Entity,
+  JoinTable,
+  ManyToMany,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
 
 export enum RoleName {
   ADMIN = 'ADMIN',
+  MODERATOR = 'MODERATOR',
+  UPLOADER = 'UPLOADER',
   USER = 'USER',
   GUEST = 'GUEST',
 }
 
-@Entity()
+@Entity('roles')
 export class Role {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ type: 'enum', enum: RoleName, unique: true, default: RoleName.USER })
+  @Column({ type: 'enum', enum: RoleName, unique: true })
   name: RoleName;
 
-  @OneToMany(() => User, (user) => user.role)
+  @ManyToMany(() => User, (user) => user.roles)
   users: User[];
+
+  @ManyToMany(() => Permission, (permission) => permission.roles, {
+    cascade: true, // Permissions are intrinsically linked to roles
+  })
+  @JoinTable({
+    name: 'role_permissions',
+    joinColumn: { name: 'role_id', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'permission_id', referencedColumnName: 'id' },
+  })
+  permissions: Permission[];
 }

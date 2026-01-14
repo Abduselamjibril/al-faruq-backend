@@ -4,8 +4,8 @@ import { Exclude, Expose } from 'class-transformer';
 import {
   Column,
   Entity,
-  JoinColumn,
-  ManyToOne,
+  JoinTable,
+  ManyToMany,
   OneToMany,
   PrimaryGeneratedColumn,
 } from 'typeorm';
@@ -15,6 +15,7 @@ import { Device } from '../../devices/entities/device.entity';
 import { UserNotificationStatus } from '../../notifications/entities/user-notification-status.entity';
 import { UserSession } from '../../auth/entities/user-session.entity';
 import { Bookmark } from '../../bookmark/entities/bookmark.entity';
+import { Content } from '../../content/entities/content.entity';
 
 export enum AuthProvider {
   LOCAL = 'LOCAL',
@@ -22,7 +23,7 @@ export enum AuthProvider {
   FACEBOOK = 'FACEBOOK',
 }
 
-@Entity()
+@Entity('users')
 export class User {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -72,9 +73,16 @@ export class User {
   @Exclude()
   otpExpiresAt: Date | null;
 
-  @ManyToOne(() => Role, (role) => role.users, { eager: true, cascade: true })
-  @JoinColumn({ name: 'roleId' })
-  role: Role;
+  @ManyToMany(() => Role, (role) => role.users, {
+    eager: true,
+    cascade: true,
+  })
+  @JoinTable({
+    name: 'user_roles',
+    joinColumn: { name: 'user_id', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'role_id', referencedColumnName: 'id' },
+  })
+  roles: Role[];
 
   @OneToMany(() => Purchase, (purchase) => purchase.user)
   purchases: Purchase[];
@@ -90,4 +98,7 @@ export class User {
 
   @OneToMany(() => Bookmark, (bookmark: Bookmark) => bookmark.user)
   bookmarks: Bookmark[];
+
+  @OneToMany(() => Content, (content) => content.createdBy)
+  createdContent: Content[];
 }

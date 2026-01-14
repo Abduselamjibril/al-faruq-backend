@@ -6,11 +6,14 @@ import { Content } from './entities/content.entity';
 import { ContentService } from './content.service';
 import { ContentController } from './content.controller';
 import { Language } from './entities/language.entity';
-import { ContentPricing } from './entities/content-pricing.entity'; // --- [NEW] IMPORT ContentPricing ---
+import { ContentPricing } from './entities/content-pricing.entity';
+import { UsersModule } from '../users/users.module'; // --- [NEW] IMPORT ---
 
 @Module({
-  // --- [CHANGED] Replaced PricingTier with ContentPricing ---
-  imports: [TypeOrmModule.forFeature([Content, ContentPricing, Language])],
+  imports: [
+    TypeOrmModule.forFeature([Content, ContentPricing, Language]),
+    UsersModule, // --- [NEW] ADD THE MODULE HERE ---
+  ],
   controllers: [ContentController],
   providers: [ContentService],
   exports: [ContentService],

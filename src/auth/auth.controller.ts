@@ -43,7 +43,10 @@ import { LoginUserDto } from './dto/login-user.dto';
 import { ChangeAdminCredentialsDto } from './dto/change-admin-credentials.dto';
 import { GoogleMobileLoginDto } from './dto/google-mobile-login.dto';
 import { SetPasswordDto } from './dto/set-password.dto';
-import { ForceLogoutDto } from './dto/force-logout.dto'; // IMPORTANT: Import the new DTO
+import { ForceLogoutDto } from './dto/force-logout.dto';
+import { PermissionsGuard } from './guards/permissions.guard';
+import { Permissions } from './decorators/permissions.decorator';
+import { PERMISSIONS } from '../database/seed.service';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -58,10 +61,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Register a new user' })
   @ApiResponse({ status: 201, description: 'User successfully created.' })
   @ApiResponse({ status: 400, description: 'Invalid input data.' })
-  @ApiResponse({
-    status: 409,
-    description: 'Email or phone number already in use.',
-  })
+  @ApiResponse({ status: 409, description: 'Email or phone number already in use.' })
   @Post('register')
   async register(@Body() registerDto: RegisterUserDto) {
     return this.authService.register(registerDto);
@@ -69,14 +69,8 @@ export class AuthController {
 
   @ApiOperation({ summary: 'Log in a user' })
   @ApiBody({ type: LoginUserDto })
-  @ApiResponse({
-    status: 200,
-    description: 'Login successful, returns JWT token.',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized, invalid credentials.',
-  })
+  @ApiResponse({ status: 200, description: 'Login successful, returns JWT token.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized, invalid credentials.' })
   @ApiResponse({ status: 403, description: 'Device limit reached.' })
   @HttpCode(HttpStatus.OK)
   @UseGuards(LocalAuthGuard)
@@ -89,15 +83,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Logout and deactivate a session' })
   @ApiResponse({ status: 200, description: 'Session logged out successfully.' })
   @ApiResponse({ status: 400, description: 'Invalid session ID.' })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        sessionId: { type: 'integer', example: 1 },
-      },
-      required: ['sessionId'],
-    },
-  })
+  @ApiBody({ schema: { type: 'object', properties: { sessionId: { type: 'integer', example: 1 } }, required: ['sessionId'] } })
   @HttpCode(HttpStatus.OK)
   @Post('logout')
   async logout(@Body() body: { sessionId: number }) {
@@ -117,18 +103,12 @@ export class AuthController {
   }
 
   @ApiOperation({ summary: 'Request a password reset OTP' })
-  @ApiResponse({
-    status: 200,
-    description: 'A confirmation message is always returned.',
-  })
+  @ApiResponse({ status: 200, description: 'A confirmation message is always returned.' })
   @HttpCode(HttpStatus.OK)
   @Post('forgot-password')
   async forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
     await this.authService.requestPasswordReset(forgotPasswordDto.email);
-    return {
-      message:
-        'If an account with that email exists, a password reset OTP has been sent.',
-    };
+    return { message: 'If an account with that email exists, a password reset OTP has been sent.' };
   }
 
   @ApiOperation({ summary: 'Reset password using an OTP' })
@@ -142,15 +122,10 @@ export class AuthController {
   }
 
   @ApiOperation({ summary: 'Initiate Google SSO flow' })
-  @ApiResponse({
-    status: 302,
-    description: 'Redirects to Google for authentication.',
-  })
+  @ApiResponse({ status: 302, description: 'Redirects to Google for authentication.' })
   @Get('google')
   @UseGuards(GoogleAuthGuard)
-  async googleAuth() {
-    // Guard handles the redirect
-  }
+  async googleAuth() {}
 
   @ApiExcludeEndpoint()
   @Get('google/callback')
@@ -162,15 +137,10 @@ export class AuthController {
   }
 
   @ApiOperation({ summary: 'Initiate Facebook SSO flow' })
-  @ApiResponse({
-    status: 302,
-    description: 'Redirects to Facebook for authentication.',
-  })
+  @ApiResponse({ status: 302, description: 'Redirects to Facebook for authentication.' })
   @Get('facebook')
   @UseGuards(FacebookAuthGuard)
-  async facebookAuth() {
-    // Guard handles the redirect
-  }
+  async facebookAuth() {}
 
   @ApiExcludeEndpoint()
   @Get('facebook/callback')
@@ -181,37 +151,24 @@ export class AuthController {
     res.redirect(`${frontendUrl}/auth/callback?token=${access_token}`);
   }
 
-  @ApiOperation({
-    summary: 'Change password for the logged-in user (User Only)',
-  })
+  @ApiOperation({ summary: 'Change password for the logged-in user (User Only)' })
   @ApiBearerAuth()
   @ApiResponse({ status: 200, description: 'Password changed successfully.' })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized or incorrect current password.',
-  })
+  @ApiResponse({ status: 401, description: 'Unauthorized or incorrect current password.' })
   @ApiResponse({ status: 403, description: 'Forbidden.' })
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(RoleName.USER)
   @Patch('change-password')
-  async changePassword(
-    @Request() req,
-    @Body() changePasswordDto: ChangePasswordDto,
-  ) {
+  async changePassword(@Request() req, @Body() changePasswordDto: ChangePasswordDto) {
     await this.authService.changePassword(req.user.id, changePasswordDto);
     return { message: 'Password changed successfully.' };
   }
 
-  @ApiOperation({
-    summary: 'Set password for SSO users who have no password (User Only)',
-  })
+  @ApiOperation({ summary: 'Set password for SSO users who have no password (User Only)' })
   @ApiBearerAuth()
   @ApiResponse({ status: 200, description: 'Password set successfully.' })
-  @ApiResponse({
-    status: 400,
-    description: 'User already has a password set (must use change-password).',
-  })
+  @ApiResponse({ status: 400, description: 'User already has a password set (must use change-password).' })
   @ApiResponse({ status: 403, description: 'Forbidden.' })
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -222,9 +179,7 @@ export class AuthController {
     return { message: 'Password set successfully.' };
   }
 
-  @ApiOperation({
-    summary: 'Get the profile of the current logged-in user (User Only)',
-  })
+  @ApiOperation({ summary: 'Get the profile of the current logged-in user (User Only)' })
   @ApiBearerAuth()
   @ApiResponse({ status: 200, description: 'Returns the user profile.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
@@ -241,13 +196,8 @@ export class AuthController {
   @Roles(RoleName.USER)
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Delete the account of the current logged-in user (User Only)',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'User account successfully deleted.',
-  })
+  @ApiOperation({ summary: 'Delete the account of the current logged-in user (User Only)' })
+  @ApiResponse({ status: 200, description: 'User account successfully deleted.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   @ApiResponse({ status: 403, description: 'Forbidden.' })
   async deleteProfile(@Request() req) {
@@ -257,58 +207,43 @@ export class AuthController {
 
   @Get('admin/profile')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(RoleName.ADMIN)
+  @Roles(RoleName.ADMIN, RoleName.MODERATOR, RoleName.UPLOADER)
   @ApiBearerAuth()
-  @ApiOperation({ summary: "Get the current admin's profile (Admin Only)" })
-  @ApiResponse({ status: 200, description: 'Returns the admin profile.' })
+  @ApiOperation({ summary: "Get the current admin portal user's profile" })
+  @ApiResponse({ status: 200, description: 'Returns the profile.' })
   @ApiResponse({ status: 403, description: 'Forbidden.' })
   getAdminProfile(@Request() req) {
     return this.usersService.findById(req.user.id);
   }
 
   @Patch('admin/change-credentials')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(RoleName.ADMIN)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PERMISSIONS.SETTINGS_MANAGE)
   @ApiBearerAuth()
-  @ApiOperation({
-    summary: "Change the current admin's email or password (Admin Only)",
-  })
+  @ApiOperation({ summary: "Change the current admin's email or password (Admin Only)" })
   @ApiBody({ type: ChangeAdminCredentialsDto })
-  @ApiResponse({
-    status: 200,
-    description: 'Admin credentials updated successfully.',
-  })
-  @ApiResponse({ status: 400, description: 'Invalid input data.' })
-  @ApiResponse({ status: 403, description: 'Forbidden.' })
+  @ApiResponse({ status: 200, description: 'Admin credentials updated successfully.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Missing permissions.' })
   @ApiResponse({ status: 409, description: 'New email is already in use.' })
-  changeAdminCredentials(
-    @Request() req,
-    @Body() changeAdminCredentialsDto: ChangeAdminCredentialsDto,
-  ) {
-    return this.authService.changeAdminCredentials(
-      req.user.id,
-      changeAdminCredentialsDto,
-    );
+  changeAdminCredentials(@Request() req, @Body() changeAdminCredentialsDto: ChangeAdminCredentialsDto) {
+    return this.authService.changeAdminCredentials(req.user.id, changeAdminCredentialsDto);
   }
 
   @ApiOperation({ summary: 'Admin: Force logout all sessions for a user' })
   @ApiBearerAuth()
   @ApiResponse({ status: 200, description: 'All sessions cleared for user.' })
-  @ApiResponse({ status: 403, description: 'Forbidden.' })
-  @ApiBody({ type: ForceLogoutDto }) // Use the new DTO for Swagger docs
+  @ApiResponse({ status: 403, description: 'Forbidden. Missing permissions.' })
+  @ApiBody({ type: ForceLogoutDto })
   @Post('admin/force-logout')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(RoleName.ADMIN)
-  async forceLogoutAll(@Body() body: ForceLogoutDto) { // Use the new DTO for validation
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PERMISSIONS.USER_MANAGE)
+  async forceLogoutAll(@Body() body: ForceLogoutDto) {
     await this.authService.forceLogoutAllSessions(body.userId);
     return { message: 'All sessions for user have been logged out.' };
   }
 
   @ApiOperation({ summary: 'Get a guest token (no credentials required)' })
-  @ApiResponse({
-    status: 200,
-    description: 'Returns a JWT token for guest access.',
-  })
+  @ApiResponse({ status: 200, description: 'Returns a JWT token for guest access.' })
   @Post('guest-token')
   async guestToken() {
     return this.authService.guestToken();
@@ -317,18 +252,11 @@ export class AuthController {
   @ApiOperation({ summary: 'Access an admin-only protected route' })
   @ApiBearerAuth()
   @ApiResponse({ status: 200, description: 'Welcome message for admin.' })
-  @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  @ApiResponse({
-    status: 403,
-    description: 'Forbidden. User is not an admin.',
-  })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(RoleName.ADMIN)
+  @ApiResponse({ status: 403, description: 'Forbidden. User is not an admin.' })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PERMISSIONS.SETTINGS_MANAGE)
   @Get('admin-only')
   adminOnly(@Request() req) {
-    return {
-      message: `Welcome, Admin! You can see this because your role is '${req.user.role}'.`,
-      user: req.user,
-    };
+    return { message: `Welcome, Admin! Your role is '${req.user.roles.join(', ')}'.`, user: req.user };
   }
 }

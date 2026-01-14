@@ -40,10 +40,11 @@ import type { Express } from 'express';
 import { AcceptPrivacyPolicyDto } from './dto/accept-privacy-policy.dto';
 import { Public } from '../auth/decorators/public.decorator';
 import { PaginationQueryDto } from '../utils/pagination-query.dto';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { Permissions } from '../auth/decorators/permissions.decorator';
+import { PERMISSIONS } from '../database/seed.service';
 
 @ApiTags('Privacy Policy')
-// @ApiBearerAuth() // <-- REMOVED FROM CONTROLLER LEVEL
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('privacy-policy')
 export class PrivacyPolicyController {
   constructor(private readonly privacyPolicyService: PrivacyPolicyService) {}
@@ -52,10 +53,7 @@ export class PrivacyPolicyController {
   @Public()
   @Get('public/active')
   @ApiOperation({ summary: 'Public: Get the currently active privacy policy' })
-  @ApiResponse({
-    status: 200,
-    description: 'The active privacy policy document details.',
-  })
+  @ApiResponse({ status: 200, description: 'The active privacy policy document details.' })
   @ApiResponse({ status: 404, description: 'No active policy found.' })
   getPubliclyActivePolicy() {
     return this.privacyPolicyService.getPubliclyActivePolicy();
@@ -63,9 +61,10 @@ export class PrivacyPolicyController {
 
   // --- USER ENDPOINT ---
   @Post('accept')
-  @ApiBearerAuth() // <-- ADDED TO METHOD LEVEL
-  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(RoleName.USER, RoleName.GUEST)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'User: Accept the current mandatory privacy policy' })
   @ApiResponse({ status: 200, description: 'Acceptance recorded successfully.' })
   @ApiResponse({ status: 400, description: 'No mandatory policy to accept.' })
@@ -85,46 +84,32 @@ export class PrivacyPolicyController {
 
   // --- ADMIN ENDPOINTS ---
   @Post('admin')
-  @ApiBearerAuth() // <-- ADDED TO METHOD LEVEL
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PERMISSIONS.POLICY_MANAGE)
+  @ApiBearerAuth()
   @HttpCode(HttpStatus.CREATED)
-  @Roles(RoleName.ADMIN)
   @UseInterceptors(FileInterceptor('file'))
   @ApiOperation({ summary: 'Admin: Create a new privacy policy' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
-    description:
-      'Multipart form data containing the policy metadata and the PDF file.',
+    description: 'Multipart form data containing the policy metadata and the PDF file.',
     schema: {
       type: 'object',
       properties: {
         title: { type: 'string', example: 'Privacy Policy Q3 2024' },
         version: { type: 'string', example: '1.1.0' },
-        description: {
-          type: 'string',
-          example: 'Added clauses for new analytics features.',
-        },
-        effectiveDate: {
-          type: 'string',
-          format: 'date-time',
-          example: '2024-10-01T00:00:00.000Z',
-        },
+        description: { type: 'string', example: 'Added clauses for new analytics features.' },
+        effectiveDate: { type: 'string', format: 'date-time', example: '2024-10-01T00:00:00.000Z' },
         isActive: { type: 'boolean', example: true },
         isMandatory: { type: 'boolean', example: true },
-        file: {
-          type: 'string',
-          format: 'binary',
-          description: 'The policy document (PDF only, max 20MB).',
-        },
+        file: { type: 'string', format: 'binary', description: 'The policy document (PDF only, max 20MB).' },
       },
       required: ['title', 'version', 'effectiveDate', 'file'],
     },
   })
-  @ApiResponse({
-    status: 201,
-    description: 'The privacy policy has been successfully created.',
-  })
+  @ApiResponse({ status: 201, description: 'The privacy policy has been successfully created.' })
   @ApiResponse({ status: 400, description: 'Invalid input or file type.' })
-  @ApiResponse({ status: 403, description: 'Forbidden. Not an admin.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Missing permissions.' })
   @ApiResponse({ status: 409, description: 'Conflict. Version already exists.' })
   create(
     @Body() createDto: CreatePrivacyPolicyDto,
@@ -143,21 +128,23 @@ export class PrivacyPolicyController {
   }
 
   @Get('admin')
-  @ApiBearerAuth() // <-- ADDED TO METHOD LEVEL
-  @Roles(RoleName.ADMIN)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PERMISSIONS.POLICY_MANAGE)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Admin: Get all privacy policies' })
   @ApiResponse({ status: 200, description: 'List of all policies.' })
-  @ApiResponse({ status: 403, description: 'Forbidden. Not an admin.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Missing permissions.' })
   findAllForAdmin() {
     return this.privacyPolicyService.findAllForAdmin();
   }
 
   @Get('admin/:id/acceptances')
-  @ApiBearerAuth() // <-- ADDED TO METHOD LEVEL
-  @Roles(RoleName.ADMIN)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PERMISSIONS.POLICY_MANAGE)
+  @ApiBearerAuth()
   @ApiOperation({ summary: "Admin: Get a paginated list of a policy's acceptances" })
   @ApiResponse({ status: 200, description: 'Paginated list of acceptances.' })
-  @ApiResponse({ status: 403, description: 'Forbidden. Not an admin.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Missing permissions.' })
   @ApiResponse({ status: 404, description: 'Policy not found.' })
   getAcceptancesForPolicy(
     @Param('id', ParseIntPipe) id: number,
@@ -167,49 +154,53 @@ export class PrivacyPolicyController {
   }
 
   @Patch('admin/:id/activate')
-  @ApiBearerAuth() // <-- ADDED TO METHOD LEVEL
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PERMISSIONS.POLICY_MANAGE)
+  @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
-  @Roles(RoleName.ADMIN)
   @ApiOperation({ summary: 'Admin: Activate a policy (deactivates others)' })
   @ApiResponse({ status: 200, description: 'Policy activated.' })
   @ApiResponse({ status: 404, description: 'Policy not found.' })
-  @ApiResponse({ status: 403, description: 'Forbidden. Not an admin.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Missing permissions.' })
   activate(@Param('id', ParseIntPipe) id: number) {
     return this.privacyPolicyService.updateActivationStatus(id, true);
   }
 
   @Patch('admin/:id/deactivate')
-  @ApiBearerAuth() // <-- ADDED TO METHOD LEVEL
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PERMISSIONS.POLICY_MANAGE)
+  @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
-  @Roles(RoleName.ADMIN)
   @ApiOperation({ summary: 'Admin: Deactivate a policy' })
   @ApiResponse({ status: 200, description: 'Policy deactivated.' })
   @ApiResponse({ status: 404, description: 'Policy not found.' })
-  @ApiResponse({ status: 403, description: 'Forbidden. Not an admin.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Missing permissions.' })
   deactivate(@Param('id', ParseIntPipe) id: number) {
     return this.privacyPolicyService.updateActivationStatus(id, false);
   }
 
   @Patch('admin/:id/make-mandatory')
-  @ApiBearerAuth() // <-- ADDED TO METHOD LEVEL
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PERMISSIONS.POLICY_MANAGE)
+  @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
-  @Roles(RoleName.ADMIN)
   @ApiOperation({ summary: 'Admin: Make a policy mandatory (un-marks others)' })
   @ApiResponse({ status: 200, description: 'Policy marked as mandatory.' })
   @ApiResponse({ status: 404, description: 'Policy not found.' })
-  @ApiResponse({ status: 403, description: 'Forbidden. Not an admin.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Missing permissions.' })
   makeMandatory(@Param('id', ParseIntPipe) id: number) {
     return this.privacyPolicyService.updateMandatoryStatus(id, true);
   }
 
   @Patch('admin/:id/make-optional')
-  @ApiBearerAuth() // <-- ADDED TO METHOD LEVEL
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PERMISSIONS.POLICY_MANAGE)
+  @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
-  @Roles(RoleName.ADMIN)
   @ApiOperation({ summary: 'Admin: Make a policy optional (not mandatory)' })
   @ApiResponse({ status: 200, description: 'Policy marked as optional.' })
   @ApiResponse({ status: 404, description: 'Policy not found.' })
-  @ApiResponse({ status: 403, description: 'Forbidden. Not an admin.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Missing permissions.' })
   makeOptional(@Param('id', ParseIntPipe) id: number) {
     return this.privacyPolicyService.updateMandatoryStatus(id, false);
   }

@@ -1,9 +1,10 @@
+// src/upload/upload.controller.ts
+
 import {
   Controller,
   Post,
   UploadedFile,
   UseInterceptors,
-  BadRequestException,
   UseGuards,
   ParseFilePipe,
   MaxFileSizeValidator,
@@ -12,9 +13,6 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Express } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
-import { RoleName } from '../roles/entities/role.entity';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -24,25 +22,23 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { UploadService } from './upload.service';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { Permissions } from '../auth/decorators/permissions.decorator';
+import { PERMISSIONS } from '../database/seed.service';
 
 @ApiTags('Upload (Admin)')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(RoleName.ADMIN)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+@Permissions(PERMISSIONS.UPLOAD_MEDIA)
 @Controller('upload')
 export class UploadController {
   constructor(private readonly uploadService: UploadService) {}
 
   @Post('video')
   @ApiOperation({ summary: 'Upload a video file' })
-  @ApiResponse({
-    status: 201,
-    description: 'Video uploaded successfully. Returns the cloud URL.',
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'No file uploaded or invalid file type.',
-  })
+  @ApiResponse({ status: 201, description: 'Video uploaded successfully. Returns the cloud URL.' })
+  @ApiResponse({ status: 400, description: 'No file uploaded or invalid file type.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Missing permissions.' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -78,14 +74,9 @@ export class UploadController {
 
   @Post('thumbnail')
   @ApiOperation({ summary: 'Upload a thumbnail image' })
-  @ApiResponse({
-    status: 201,
-    description: 'Thumbnail uploaded successfully. Returns the cloud URL.',
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'No file uploaded or invalid file type.',
-  })
+  @ApiResponse({ status: 201, description: 'Thumbnail uploaded successfully. Returns the cloud URL.' })
+  @ApiResponse({ status: 400, description: 'No file uploaded or invalid file type.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Missing permissions.' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -121,14 +112,9 @@ export class UploadController {
 
   @Post('audio')
   @ApiOperation({ summary: 'Upload an audio file' })
-  @ApiResponse({
-    status: 201,
-    description: 'Audio uploaded successfully. Returns the cloud URL.',
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'No file uploaded or invalid file type.',
-  })
+  @ApiResponse({ status: 201, description: 'Audio uploaded successfully. Returns the cloud URL.' })
+  @ApiResponse({ status: 400, description: 'No file uploaded or invalid file type.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Missing permissions.' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -162,17 +148,11 @@ export class UploadController {
     };
   }
 
-  // --- [NEW] PDF UPLOAD ENDPOINT ---
   @Post('pdf')
   @ApiOperation({ summary: 'Upload a PDF file for a book' })
-  @ApiResponse({
-    status: 201,
-    description: 'PDF uploaded successfully. Returns the cloud URL.',
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'No file uploaded or invalid file type.',
-  })
+  @ApiResponse({ status: 201, description: 'PDF uploaded successfully. Returns the cloud URL.' })
+  @ApiResponse({ status: 400, description: 'No file uploaded or invalid file type.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Missing permissions.' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -198,10 +178,7 @@ export class UploadController {
     )
     file: Express.Multer.File,
   ) {
-    // --- [MODIFICATION] ADDED LOGGING ---
     console.log(`[Controller] Received new file to upload: ${file.originalname}, Size: ${file.size} bytes`);
-    // --- [END OF MODIFICATION] ---
-
     const result = await this.uploadService.uploadFile(file, 'pdf');
     return {
       message: 'PDF uploaded successfully to cloud',
@@ -209,5 +186,4 @@ export class UploadController {
       provider_id: result.provider_id,
     };
   }
-  // --- [END OF NEW] ---
 }

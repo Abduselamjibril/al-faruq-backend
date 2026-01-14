@@ -15,6 +15,7 @@ import {
 import { Purchase } from '../../purchase/entities/purchase.entity';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { ContentPricing } from './content-pricing.entity';
+import { User } from '../../users/entities/user.entity';
 
 export enum ContentType {
   MOVIE = 'MOVIE',
@@ -29,7 +30,14 @@ export enum ContentType {
   BOOK = 'BOOK',
 }
 
-@Entity()
+export enum ContentStatus {
+  DRAFT = 'DRAFT',
+  PENDING_REVIEW = 'PENDING_REVIEW',
+  PUBLISHED = 'PUBLISHED',
+  ARCHIVED = 'ARCHIVED',
+}
+
+@Entity('content')
 export class Content extends BaseEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -91,6 +99,20 @@ export class Content extends BaseEntity {
     enum: ContentType,
   })
   type: ContentType;
+  
+  @Index()
+  @Column({
+    type: 'enum',
+    enum: ContentStatus,
+    default: ContentStatus.PUBLISHED,
+  })
+  status: ContentStatus;
+
+  @Column({ type: 'timestamp', nullable: true })
+  submittedAt: Date | null;
+  
+  @Column({ type: 'text', nullable: true })
+  rejectionReason: string | null;
 
   @Index()
   @Column({ default: false })
@@ -109,10 +131,16 @@ export class Content extends BaseEntity {
   @OneToMany(() => Content, (content) => content.parent)
   children: Content[];
 
+  @ManyToOne(() => User, (user) => user.createdContent, {
+    onDelete: 'SET NULL',
+    nullable: true,
+  })
+  @JoinColumn({ name: 'created_by_id' })
+  createdBy: User | null;
+
   @OneToMany(() => Purchase, (purchase) => purchase.content)
   purchases: Purchase[];
 
-  // --- [NEW] Optional property for API responses, not a DB column ---
   @ApiPropertyOptional({
     description: 'Available pricing options if the content is locked and not owned by the user.',
     type: [ContentPricing],

@@ -4,7 +4,8 @@ import { ApiProperty } from '@nestjs/swagger';
 
 class UserInfo {
   @ApiProperty()
-  id: number;
+  id: string;
+
   @ApiProperty()
   email: string;
 }
@@ -12,6 +13,7 @@ class UserInfo {
 class ContentInfo {
   @ApiProperty()
   id: string;
+  
   @ApiProperty()
   title: string;
 }

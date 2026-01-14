@@ -8,7 +8,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
-  ParseUUIDPipe, // IMPORTANT: Import ParseUUIDPipe
+  ParseUUIDPipe,
   Query,
   UseGuards,
   UseInterceptors,
@@ -21,43 +21,45 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { RoleName } from '../roles/entities/role.entity';
-import { Roles } from '../auth/decorators/roles.decorator';
 import { UsersService } from './users.service';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { Permissions } from '../auth/decorators/permissions.decorator';
+import { PERMISSIONS } from '../database/seed.service';
 
 @ApiTags('User Management (Admin)')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(RoleName.ADMIN)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @UseInterceptors(ClassSerializerInterceptor)
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Get a list of all users' })
+  @Permissions(PERMISSIONS.USER_MANAGE)
+  @ApiOperation({ summary: 'Get a list of all users (Admin Only)' })
   @ApiResponse({ status: 200, description: 'Returns a list of all users.' })
-  @ApiResponse({ status: 403, description: 'Forbidden.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Missing permissions.' })
   findAll() {
     return this.usersService.findAll();
   }
 
   @Get('search')
-  @ApiOperation({ summary: 'Search for users by name, email, or phone number' })
+  @Permissions(PERMISSIONS.USER_MANAGE)
+  @ApiOperation({ summary: 'Search for users by name, email, or phone number (Admin Only)' })
   @ApiQuery({ name: 'term', required: true, description: 'The search term to look for.' })
   @ApiResponse({ status: 200, description: 'Returns a list of matching users.' })
-  @ApiResponse({ status: 403, description: 'Forbidden.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Missing permissions.' })
   search(@Query('term') term: string) {
     return this.usersService.search(term);
   }
 
   @Delete(':id')
+  @Permissions(PERMISSIONS.USER_MANAGE)
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Delete a user by ID' })
+  @ApiOperation({ summary: 'Delete a user by ID (Admin Only)' })
   @ApiResponse({ status: 204, description: 'User successfully deleted.' })
   @ApiResponse({ status: 404, description: 'User with the specified ID not found.' })
-  @ApiResponse({ status: 403, description: 'Forbidden.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Missing permissions.' })
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.usersService.remove(id);
   }

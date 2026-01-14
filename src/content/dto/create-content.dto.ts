@@ -11,8 +11,8 @@ import {
   ValidateIf,
   IsUrl,
 } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
-import { ContentType } from '../entities/content.entity';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ContentStatus, ContentType } from '../entities/content.entity';
 
 export class CreateContentDto {
   @ApiProperty({
@@ -23,10 +23,9 @@ export class CreateContentDto {
   @IsNotEmpty()
   title: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'A detailed description or synopsis of the content. Required for Books.',
     example: 'A thief who steals corporate secrets...',
-    required: false,
   })
   @ValidateIf((o) => o.type === ContentType.BOOK)
   @IsNotEmpty()
@@ -43,21 +42,27 @@ export class CreateContentDto {
   @IsNotEmpty()
   type: ContentType;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The ID of the parent content (e.g., a Series ID for a Season).',
     example: 'a1b2c3d4-e5f6-7890-1234-567890abcdef',
-    required: false,
   })
   @IsUUID()
   @IsOptional()
   parentId?: string;
 
+  @ApiPropertyOptional({
+    description: 'The initial status of the content. Defaults to DRAFT if not provided.',
+    enum: [ContentStatus.DRAFT, ContentStatus.PENDING_REVIEW],
+    example: ContentStatus.DRAFT,
+  })
+  @IsOptional()
+  @IsEnum([ContentStatus.DRAFT, ContentStatus.PENDING_REVIEW])
+  status?: ContentStatus;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description:
       'Primary video file URL (required for playable types unless youtubeUrl is provided).',
     example: 'https://cdn.example.com/videos/inception.mp4',
-    required: false,
   })
   @ValidateIf(
     (o) =>
@@ -71,60 +76,42 @@ export class CreateContentDto {
       ].includes(o.type) && !o.youtubeUrl,
   )
   @IsUrl()
-  @IsNotEmpty()
+  @IsOptional()
   videoUrl?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description:
-      'YouTube video or audio URL (required for playable types unless videoUrl is provided).',
-    example: 'https://www.youtube.com/watch?v=abc123',
-    required: false,
+      'YouTube video or audio URL (can be provided instead of a direct videoUrl).',
+    example: 'https://www.youtube.com/watch?v=some_id',
   })
-  @ValidateIf(
-    (o) =>
-      [
-        ContentType.MOVIE,
-        ContentType.MUSIC_VIDEO,
-        ContentType.EPISODE,
-        ContentType.DAWAH,
-        ContentType.DOCUMENTARY,
-        ContentType.PROPHET_HISTORY_EPISODE,
-      ].includes(o.type) && !o.videoUrl,
-  )
   @IsUrl()
-  @IsNotEmpty()
   @IsOptional()
   youtubeUrl?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description:
       'Main audio file URL (required for PROPHET_HISTORY_EPISODE unless youtubeUrl is provided; optional for BOOK).',
     example: 'https://cdn.example.com/audio/prophet-history-ep1.mp3',
-    required: false,
   })
   @ValidateIf(
     (o) => o.type === ContentType.PROPHET_HISTORY_EPISODE && !o.youtubeUrl,
   )
   @IsUrl()
-  @IsNotEmpty()
-  @IsOptional() // Keep it optional for books
+  @IsOptional()
   audioUrl?: string;
   
-  // --- [NEW] PDF URL FIELD FOR BOOKS ---
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The URL of the PDF file (Required for BOOK).',
     example: 'https://cdn.example.com/books/book-title.pdf',
-    required: false,
   })
   @ValidateIf((o) => o.type === ContentType.BOOK)
   @IsUrl()
-  @IsNotEmpty()
+  @IsOptional()
   pdfUrl?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The duration of the media in seconds (for playable content).',
     example: 9000,
-    required: false,
   })
   @ValidateIf((o) =>
     [
@@ -138,13 +125,12 @@ export class CreateContentDto {
   )
   @IsInt()
   @Min(1)
-  @IsNotEmpty()
+  @IsOptional()
   duration?: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The URL of the thumbnail image (for all top-level content).',
     example: 'https://cdn.example.com/images/inception-poster.jpg',
-    required: false,
   })
   @ValidateIf((o) =>
     [
@@ -158,73 +144,64 @@ export class CreateContentDto {
     ].includes(o.type),
   )
   @IsUrl()
-  @IsNotEmpty()
+  @IsOptional()
   thumbnailUrl?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The URL of the trailer video file.',
     example: 'https://cdn.example.com/videos/inception-trailer.mp4',
-    required: false,
   })
   @IsOptional()
   @IsUrl()
   trailerUrl?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Comma-separated tags for categorization and search.',
     example: 'Seerah,Prophets,Makkah',
-    required: false,
   })
   @IsOptional()
   @IsString()
   tags?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: "The name of the book's author (Required for BOOK).",
     example: 'Imam Al-Ghazali',
-    required: false,
   })
   @ValidateIf((o) => o.type === ContentType.BOOK)
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   authorName?: string;
   
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'A long-form description about the book.',
     example: 'This book explores the depths of...',
-    required: false,
   })
   @IsString()
   @IsOptional()
   about?: string;
   
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: "The genre of the book (e.g., Fiqh, Seerah, History).",
     example: 'Fiqh',
-    required: false,
   })
   @IsString()
   @IsOptional()
   genre?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The total number of pages in the book.',
     example: 250,
-    required: false,
   })
   @IsInt()
   @Min(1)
   @IsOptional()
   pageSize?: number;
   
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The year the book was published.',
     example: 1998,
-    required: false,
   })
   @IsInt()
   @IsOptional()
   publicationYear?: number;
-
-  
 }

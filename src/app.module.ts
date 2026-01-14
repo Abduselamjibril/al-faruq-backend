@@ -30,7 +30,9 @@ import { NewsModule } from './news/news.module';
 import { QuranModule } from './quran/quran.module';
 import { BookmarkModule } from './bookmark/bookmark.module';
 import { EntitlementModule } from './entitlement/entitlement.module';
-import { PrivacyPolicyModule } from './privacy-policy/privacy-policy.module'; // --- [NEW] IMPORT PRIVACY POLICY MODULE ---
+import { PrivacyPolicyModule } from './privacy-policy/privacy-policy.module';
+import { AdminModule } from './admin/admin.module'; // --- [NEW] IMPORT ADMIN MODULE ---
+import { PermissionsModule } from './permissions/permissions.module'; // --- [NEW] IMPORT PERMISSIONS MODULE ---
 
 @Module({
   imports: [
@@ -52,6 +54,7 @@ import { PrivacyPolicyModule } from './privacy-policy/privacy-policy.module'; //
     TypeOrmModule.forRoot(dataSourceOptions),
 
     // Application Modules
+    AdminModule, // --- [NEW] ADD THE ADMIN MODULE HERE ---
     AuthModule,
     BookmarkModule,
     ContentModule,
@@ -63,7 +66,8 @@ import { PrivacyPolicyModule } from './privacy-policy/privacy-policy.module'; //
     MailModule,
     NewsModule,
     NotificationsModule,
-    PrivacyPolicyModule, // --- [NEW] ADD THE PRIVACY POLICY MODULE HERE ---
+    PermissionsModule, // --- [NEW] ADD THE PERMISSIONS MODULE HERE ---
+    PrivacyPolicyModule,
     PurchaseModule,
     QuranModule,
     RemindersModule,

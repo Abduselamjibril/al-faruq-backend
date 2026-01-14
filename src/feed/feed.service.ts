@@ -3,7 +3,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindManyOptions, Like, In } from 'typeorm';
-import { Content, ContentType } from '../content/entities/content.entity';
+import { Content, ContentStatus, ContentType } from '../content/entities/content.entity';
 import { FeedQueryDto } from './dto/feed-query.dto';
 import { PaginationResponseDto } from '../utils/pagination.dto';
 import { EntitlementService } from '../entitlement/entitlement.service';
@@ -36,7 +36,10 @@ export class FeedService {
       ContentType.DAWAH, ContentType.DOCUMENTARY, ContentType.PROPHET_HISTORY,
       ContentType.BOOK,
     ];
-
+    
+    // --- CRITICAL CHANGE: Only show PUBLISHED content ---
+    where.status = ContentStatus.PUBLISHED;
+    
     where.type = category ? category : In(topLevelTypes);
 
     if (where.type === ContentType.BOOK) {
@@ -101,6 +104,10 @@ export class FeedService {
     }
 
     const where: FindManyOptions<Content>['where'] = { id: In(entitledContentIds) };
+    
+    // --- CRITICAL CHANGE: Only show PUBLISHED content in the user's library ---
+    where.status = ContentStatus.PUBLISHED;
+
     if (category) where.type = category;
     if (category === ContentType.BOOK) {
       if (author) where.authorName = Like(`%${author}%`);
@@ -124,10 +131,13 @@ export class FeedService {
     qb.leftJoinAndSelect('content.children', 'seasonsOrEpisodes')
       .leftJoinAndSelect('seasonsOrEpisodes.children', 'episodes')
       .where('content.id = :id', { id: contentId })
+      // --- CRITICAL CHANGE: Prevent access to non-published content by URL guessing ---
+      .andWhere('content.status = :status', { status: ContentStatus.PUBLISHED })
       .orderBy({ 'seasonsOrEpisodes.createdAt': 'ASC', 'episodes.createdAt': 'ASC' });
 
     const content: Content | null = await qb.getOne();
     if (!content) {
+      // This will now correctly throw a 404 for DRAFT, PENDING_REVIEW, or ARCHIVED content
       throw new NotFoundException(`Content with ID ${contentId} not found.`);
     }
 
@@ -156,7 +166,7 @@ export class FeedService {
     pricingMap: Map<string, ContentPricing[]>
   ) {
     const hasAccess = await this.entitlementService.checkUserAccess(
-      '', // We pass an empty string now as we are checking against a pre-fetched set
+      '',
       node.id,
       entitledContentIds,
     );
