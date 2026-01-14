@@ -1,8 +1,8 @@
 // src/content/dto/lock-content.dto.ts
 
 import {
+  IsBoolean,
   IsInt,
-  IsNotEmptyObject,
   IsNumber,
   IsObject,
   IsOptional,
@@ -14,7 +14,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 class TemporaryPriceDto {
   @ApiProperty({
-    description: 'The price for a temporary rental.',
+    description: 'The base price for a temporary rental.',
     example: 40.0,
   })
   @IsNumber()
@@ -28,17 +28,50 @@ class TemporaryPriceDto {
   @IsInt()
   @Min(1)
   durationDays: number;
+
+  @ApiProperty({
+    description:
+      'If true, VAT will be added on top of the price (customer pays). If false, VAT is included in the price (platform pays).',
+    example: true,
+    default: true,
+    required: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  isVatAdded?: boolean = true;
 }
 
-export class LockContentDto {
-  @ApiPropertyOptional({
-    description: 'The price for a permanent, non-expiring purchase.',
+class PermanentPriceDto {
+  @ApiProperty({
+    description: 'The base price for a permanent, non-expiring purchase.',
     example: 100.0,
   })
   @IsNumber()
   @Min(0)
+  price: number;
+
+  @ApiProperty({
+    description:
+      'If true, VAT will be added on top of the price (customer pays). If false, VAT is included in the price (platform pays).',
+    example: true,
+    default: true,
+    required: false,
+  })
+  @IsBoolean()
   @IsOptional()
-  permanentPrice?: number;
+  isVatAdded?: boolean = true;
+}
+
+export class LockContentDto {
+  @ApiPropertyOptional({
+    description:
+      'The pricing details for a permanent, non-expiring purchase.',
+  })
+  @IsObject()
+  @ValidateNested()
+  @Type(() => PermanentPriceDto)
+  @IsOptional()
+  permanentPrice?: PermanentPriceDto;
 
   @ApiPropertyOptional({
     description: 'The pricing details for a temporary, expiring rental.',

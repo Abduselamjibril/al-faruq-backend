@@ -13,14 +13,12 @@ import {
 import { User } from '../../users/entities/user.entity';
 import { Content } from '../../content/entities/content.entity';
 
-// --- [NEW] ENUM for PaymentType ---
 export enum PaymentType {
-  SUBSCRIPTION = 'SUBSCRIPTION', // For blanket access (legacy or future)
-  TOP_UP = 'TOP_UP', // A more generic term for adding value, can be used for unlocks
-  UNLOCK = 'UNLOCK', // Specifically for single-item permanent purchases
+  SUBSCRIPTION = 'SUBSCRIPTION',
+  TOP_UP = 'TOP_UP',
+  UNLOCK = 'UNLOCK',
 }
 
-// --- [NEW] ENUM for ContentScope ---
 export enum ContentScope {
   EPISODE = 'EPISODE',
   SEASON = 'SEASON',
@@ -45,35 +43,69 @@ export class Purchase extends BaseEntity {
   @ManyToOne(() => Content, (content) => content.purchases, {
     onDelete: 'CASCADE',
   })
-  @JoinColumn({ name: 'contentId' }) // Keep original content relationship for backward compatibility
+  @JoinColumn({ name: 'contentId' })
   content: Content;
 
-  // --- [NEW] Store the payment type ---
   @Column({
     type: 'enum',
     enum: PaymentType,
-    default: PaymentType.SUBSCRIPTION,
+    default: PaymentType.UNLOCK,
   })
   paymentType: PaymentType;
 
-  // --- [NEW] Store the scope of the purchase ---
   @Column({
     type: 'enum',
     enum: ContentScope,
-    nullable: true, // Nullable for legacy data
+    nullable: true,
   })
   contentScope: ContentScope | null;
 
-  // --- [NEW] Store the specific content ID of the item unlocked ---
-  // This is crucial for per-episode unlocks. `contentId` above might point to the Series.
   @Column({ type: 'uuid', nullable: true })
   purchasedContentId: string | null;
 
-  @Column({ type: 'timestamp with time zone', nullable: true }) // Made nullable for permanent unlocks
+  @Column({ type: 'timestamp with time zone', nullable: true })
   expiresAt: Date | null;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
-  pricePaid: number;
+  @Column({
+    type: 'decimal',
+    precision: 12,
+    scale: 2,
+    comment: 'The base price of the content before VAT.',
+  })
+  baseAmount: number;
+
+  @Column({
+    type: 'decimal',
+    precision: 12,
+    scale: 2,
+    comment: 'The VAT amount for this transaction.',
+  })
+  vatAmount: number;
+
+  @Column({
+    type: 'decimal',
+    precision: 12,
+    scale: 2,
+    comment: 'The transaction fee charged by the payment gateway (Chapa).',
+  })
+  transactionFee: number;
+
+  @Column({
+    type: 'decimal',
+    precision: 12,
+    scale: 2,
+    comment: 'The final total amount charged to the customer (base + VAT).',
+  })
+  grossAmount: number;
+
+  @Column({
+    type: 'decimal',
+    precision: 12,
+    scale: 2,
+    comment:
+      'The amount available for revenue splitting (gross - fee - VAT).',
+  })
+  netAmountForSplit: number;
 
   @Column({ unique: true })
   chapaTransactionId: string;

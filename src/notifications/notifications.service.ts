@@ -62,12 +62,13 @@ export class NotificationsService {
       };
     });
 
-    const meta = new PaginationMetaDto();
-    meta.totalItems = totalItems;
-    meta.itemCount = data.length;
-    meta.itemsPerPage = limit;
-    meta.totalPages = Math.ceil(totalItems / limit);
-    meta.currentPage = page;
+    const meta = new PaginationMetaDto({
+      itemCount: data.length,
+      totalItems,
+      itemsPerPage: limit,
+      totalPages: Math.ceil(totalItems / limit),
+      currentPage: page,
+    });
 
     return new PaginationResponseDto(data, meta);
   }

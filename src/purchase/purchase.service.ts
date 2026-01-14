@@ -10,7 +10,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { firstValueFrom } from 'rxjs';
 import { randomBytes } from 'crypto';
 import { AxiosResponse } from 'axios';
@@ -44,6 +44,8 @@ export class PurchaseService {
   private readonly apiDomain: string;
   private readonly skylinkSubaccountId: string;
   private readonly skylinkSplitPercentage: number;
+  private readonly vatPercentage: number;
+  private readonly chapaFeePercentage: number;
 
   constructor(
     @InjectRepository(Purchase)
@@ -61,31 +63,60 @@ export class PurchaseService {
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
     private readonly entitlementService: EntitlementService,
+    private readonly dataSource: DataSource, // Inject DataSource for transactions
   ) {
-    this.logger.log('PurchaseService constructor: Loading environment variables...');
+    this.logger.log(
+      'PurchaseService constructor: Loading environment variables...',
+    );
     const secretKey = this.configService.get<string>('CHAPA_SECRET_KEY');
     const domain = this.configService.get<string>('API_DOMAIN');
-    const subaccountId = this.configService.get<string>('SKYLINK_CHAPA_SUBACCOUNT_ID');
-    const splitPercentage = this.configService.get<number>('SKYLINK_SPLIT_PERCENTAGE');
+    const subaccountId = this.configService.get<string>(
+      'SKYLINK_CHAPA_SUBACCOUNT_ID',
+    );
+    const splitPercentage = this.configService.get<number>(
+      'SKYLINK_SPLIT_PERCENTAGE',
+    );
+    const vat = this.configService.get<number>('VAT_PERCENTAGE');
+    const fee = this.configService.get<number>('CHAPA_FEE_PERCENTAGE');
 
-    if (!secretKey || !domain || !subaccountId || !splitPercentage) {
-      throw new Error('Required env vars missing: CHAPA_SECRET_KEY, API_DOMAIN, SKYLINK_CHAPA_SUBACCOUNT_ID, SKYLINK_SPLIT_PERCENTAGE');
+    if (
+      !secretKey ||
+      !domain ||
+      !subaccountId ||
+      !splitPercentage ||
+      !vat ||
+      !fee
+    ) {
+      throw new Error(
+        'Required env vars missing: CHAPA_SECRET_KEY, API_DOMAIN, SKYLINK_CHAPA_SUBACCOUNT_ID, SKYLINK_SPLIT_PERCENTAGE, VAT_PERCENTAGE, CHAPA_FEE_PERCENTAGE',
+      );
     }
 
     this.chapaSecretKey = secretKey;
     this.apiDomain = domain;
     this.skylinkSubaccountId = subaccountId;
     this.skylinkSplitPercentage = splitPercentage;
-    this.logger.log('PurchaseService constructor: Environment variables loaded successfully.');
+    this.vatPercentage = vat / 100; // Convert to decimal e.g., 15 -> 0.15
+    this.chapaFeePercentage = fee / 100; // Convert to decimal e.g., 3.5 -> 0.035
+    this.logger.log(
+      'PurchaseService constructor: Environment variables loaded successfully.',
+    );
   }
 
-  async initiatePurchase(userId: string, initiatePurchaseDto: InitiatePurchaseDto) {
+  async initiatePurchase(
+    userId: string,
+    initiatePurchaseDto: InitiatePurchaseDto,
+  ) {
     const { contentId, accessType } = initiatePurchaseDto;
-    this.logger.log(`[initiatePurchase] UserID: ${userId}, ContentID: ${contentId}, AccessType: ${accessType}`);
+    this.logger.log(
+      `[initiatePurchase] UserID: ${userId}, ContentID: ${contentId}, AccessType: ${accessType}`,
+    );
 
     const user = await this.userRepository.findOneBy({ id: userId });
     if (!user || !user.email) {
-      throw new NotFoundException(`User with ID ${userId} not found or has no email.`);
+      throw new NotFoundException(
+        `User with ID ${userId} not found or has no email.`,
+      );
     }
 
     const content = await this.contentRepository.findOneBy({ id: contentId });
@@ -93,7 +124,10 @@ export class PurchaseService {
       throw new NotFoundException(`Content with ID ${contentId} not found.`);
     }
 
-    const hasAccess = await this.entitlementService.checkUserAccess(userId, contentId);
+    const hasAccess = await this.entitlementService.checkUserAccess(
+      userId,
+      contentId,
+    );
     if (hasAccess) {
       throw new BadRequestException('User already has access to this content.');
     }
@@ -105,10 +139,30 @@ export class PurchaseService {
     });
 
     if (!content.isLocked || !pricing) {
-      throw new BadRequestException(`This content is not available for the specified purchase type.`);
+      throw new BadRequestException(
+        `This content is not available for the specified purchase type.`,
+      );
     }
 
-    const price = parseFloat(pricing.price.toString());
+    const basePrice = parseFloat(pricing.basePrice.toString());
+    const { isVatAdded } = pricing;
+
+    // --- DYNAMIC VAT CALCULATION ---
+    let vatAmount = 0;
+    let grossAmountToCharge = 0;
+
+    if (isVatAdded) {
+      // Case 1: Customer pays VAT. It's added on top of the base price.
+      vatAmount = basePrice * this.vatPercentage;
+      grossAmountToCharge = basePrice + vatAmount;
+    } else {
+      // Case 2: Platform absorbs VAT. Base price already includes it.
+      const netBeforeVat = basePrice / (1 + this.vatPercentage);
+      vatAmount = basePrice - netBeforeVat;
+      grossAmountToCharge = basePrice;
+    }
+    // --- END OF VAT CALCULATION ---
+
     const tx_ref = `tx-${randomBytes(16).toString('hex')}`;
     const transactionCharge = this.skylinkSplitPercentage / 100;
     const splits = {
@@ -116,13 +170,18 @@ export class PurchaseService {
       transaction_charge_type: 'percentage',
       transaction_charge: transactionCharge,
     };
-    const httpsReturnUrl = `${this.apiDomain}/api/purchase/verify-redirect?tx_ref=${tx_ref}`;
-    const webhookUrl = `${this.apiDomain}/api/purchase/chapa-webhook`;
+    const httpsReturnUrl = `${this.apiDomain}/purchase/verify-redirect?tx_ref=${tx_ref}`;
+    const webhookUrl = `${this.apiDomain}/purchase/chapa-webhook`;
 
     const chapaRequestBody: any = {
-      amount: price.toString(), currency: 'ETB', email: user.email,
-      first_name: user.firstName || '', last_name: user.lastName || '',
-      tx_ref: tx_ref, callback_url: webhookUrl, return_url: httpsReturnUrl,
+      amount: grossAmountToCharge.toFixed(2), // Send the final calculated amount
+      currency: 'ETB',
+      email: user.email,
+      first_name: user.firstName || '',
+      last_name: user.lastName || '',
+      tx_ref: tx_ref,
+      callback_url: webhookUrl,
+      return_url: httpsReturnUrl,
       'customization[title]': 'Al-Faruq Content Purchase',
       'customization[description]': `Access to ${content.title}`,
       splits: splits,
@@ -137,23 +196,37 @@ export class PurchaseService {
         ),
       );
 
-      if (response.data.status !== 'success' || !response.data.data?.checkout_url) {
-        throw new InternalServerErrorException('Failed to initialize Chapa transaction.');
+      if (
+        response.data.status !== 'success' ||
+        !response.data.data?.checkout_url
+      ) {
+        throw new InternalServerErrorException(
+          'Failed to initialize Chapa transaction.',
+        );
       }
 
+      // Save the pre-calculated values to the temporary transaction record
       const pendingTx = this.pendingTransactionRepository.create({
-        tx_ref, userId, contentId,
+        tx_ref,
+        userId,
+        contentId,
         accessType: accessType,
         durationDays: pricing.durationDays,
         paymentType: PaymentType.UNLOCK,
         contentScope: content.type as unknown as EntitlementContentScope,
+        baseAmount: basePrice,
+        vatAmount: vatAmount,
+        grossAmount: grossAmountToCharge,
       });
       await this.pendingTransactionRepository.save(pendingTx);
 
       return { checkoutUrl: response.data.data.checkout_url };
     } catch (error) {
       const axiosError = error as { response?: AxiosResponse };
-      this.logger.error(`[initiatePurchase] Chapa Error:`, axiosError.response?.data || error.message);
+      this.logger.error(
+        `[initiatePurchase] Chapa Error:`,
+        axiosError.response?.data || error.message,
+      );
       throw new InternalServerErrorException('Could not initiate payment.');
     }
   }
@@ -164,13 +237,19 @@ export class PurchaseService {
       this.logger.warn('[verifyAndGrantAccess] No tx_ref provided.');
       return false;
     }
-    const pendingTx = await this.pendingTransactionRepository.findOneBy({ tx_ref });
+    const pendingTx = await this.pendingTransactionRepository.findOneBy({
+      tx_ref,
+    });
     if (!pendingTx) {
-      const existingPurchase = await this.purchaseRepository.findOneBy({ chapaTransactionId: tx_ref });
+      const existingPurchase = await this.purchaseRepository.findOneBy({
+        chapaTransactionId: tx_ref,
+      });
       if (existingPurchase) {
         return true;
       }
-      this.logger.warn(`[verifyAndGrantAccess] Unknown or already processed tx_ref: ${tx_ref}.`);
+      this.logger.warn(
+        `[verifyAndGrantAccess] Unknown or already processed tx_ref: ${tx_ref}.`,
+      );
       return false;
     }
 
@@ -187,12 +266,28 @@ export class PurchaseService {
         return false;
       }
 
-      const { userId, contentId, accessType, contentScope, durationDays } = pendingTx;
-      const amount = verificationResponse.data.data?.amount ?? 0;
+      const {
+        userId,
+        contentId,
+        accessType,
+        contentScope,
+        durationDays,
+        baseAmount,
+        vatAmount,
+        grossAmount,
+      } = pendingTx;
 
       const user = await this.userRepository.findOneBy({ id: userId });
       const content = await this.contentRepository.findOneBy({ id: contentId });
-      if (!user || !content) { throw new Error(`Invalid user or content in pending TX ${tx_ref}`); }
+      if (!user || !content) {
+        throw new Error(`Invalid user or content in pending TX ${tx_ref}`);
+      }
+
+      // --- FINANCIAL SETTLEMENT CALCULATION (Corrected) ---
+      // This happens *after* payment is confirmed. We calculate what the fee was for our records.
+      const transactionFee = grossAmount * this.chapaFeePercentage;
+      const netAmountForSplit = grossAmount - transactionFee - vatAmount;
+      // --- END OF SETTLEMENT CALCULATION ---
 
       let expiresAt: Date | null = null;
       if (accessType === AccessType.TEMPORARY && durationDays) {
@@ -200,33 +295,52 @@ export class PurchaseService {
         expiresAt.setDate(expiresAt.getDate() + durationDays);
       }
 
-      const newPurchase = this.purchaseRepository.create({
-        user, content,
-        pricePaid: parseFloat(amount.toString()),
-        expiresAt: expiresAt,
-        chapaTransactionId: tx_ref,
-        paymentType: pendingTx.paymentType,
-        contentScope: contentScope as unknown as ContentScope,
-        purchasedContentId: contentId,
-      });
-      await this.purchaseRepository.save(newPurchase);
+      // Use a database transaction to ensure all records are created or none are.
+      await this.dataSource.transaction(async (transactionalEntityManager) => {
+        const newPurchase = transactionalEntityManager.create(Purchase, {
+          user,
+          content,
+          purchasedContentId: contentId,
+          expiresAt: expiresAt,
+          chapaTransactionId: tx_ref,
+          paymentType: pendingTx.paymentType,
+          contentScope: contentScope as unknown as ContentScope,
+          baseAmount,
+          vatAmount,
+          transactionFee,
+          grossAmount,
+          netAmountForSplit,
+        });
+        const savedPurchase = await transactionalEntityManager.save(
+          newPurchase,
+        );
 
-      const newEntitlement = this.entitlementRepository.create({
-        userId, contentId,
-        contentType: contentScope,
-        accessType,
-        validFrom: new Date(),
-        validUntil: expiresAt,
-        source: EntitlementSource.TOP_UP,
-        purchaseId: newPurchase.id,
-      });
-      await this.entitlementRepository.save(newEntitlement);
+        const newEntitlement = transactionalEntityManager.create(
+          UserContentEntitlement,
+          {
+            userId,
+            contentId,
+            contentType: contentScope,
+            accessType,
+            validFrom: new Date(),
+            validUntil: expiresAt,
+            source: EntitlementSource.TOP_UP,
+            purchaseId: savedPurchase.id,
+          },
+        );
+        await transactionalEntityManager.save(newEntitlement);
 
-      await this.pendingTransactionRepository.remove(pendingTx);
+        await transactionalEntityManager.remove(pendingTx);
+      });
+
       return true;
     } catch (error) {
       const axiosError = error as { response?: AxiosResponse };
-      this.logger.error(`[verifyAndGrantAccess] Error for ${tx_ref}:`, axiosError.response?.data || error.message);
+      this.logger.error(
+        `[verifyAndGrantAccess] Error for ${tx_ref}:`,
+        axiosError.response?.data || error.message,
+      );
+      // Ensure pending transaction is removed even on failure to prevent retries
       await this.pendingTransactionRepository.remove(pendingTx);
       return false;
     }

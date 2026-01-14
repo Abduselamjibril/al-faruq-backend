@@ -32,32 +32,26 @@ export class PolicyAcceptanceGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const user = request.user;
 
-    // 2. If no user is attached, something is wrong, but let other guards handle it.
-    // This guard should run AFTER the JwtAuthGuard.
-    if (!user) {
+    // 2. If no user is attached, let other guards handle it.
+      if (!user || !user.roles) {
+        return true;
+      }
+
+      // Only apply policy acceptance check to users with the USER role
+      if (user.roles.includes(RoleName.USER)) {
+        const isAcceptanceRequired =
+          await this.privacyPolicyService.checkIfAcceptanceIsRequired(user.id);
+
+        if (isAcceptanceRequired) {
+          throw new ForbiddenException({
+            statusCode: 403,
+            message: 'You must accept the latest privacy policy to continue.',
+            error: 'Policy Acceptance Required',
+          });
+        }
+      }
+
+      // All other roles bypass the policy acceptance check
       return true;
-    }
-
-    // 3. Admins are exempt from the policy check
-    if (user.role === RoleName.ADMIN) {
-      return true;
-    }
-
-    // 4. Check if the user needs to accept a policy
-    const isAcceptanceRequired =
-      await this.privacyPolicyService.checkIfAcceptanceIsRequired(user.id);
-
-    if (isAcceptanceRequired) {
-      // 5. If required, block the request
-      throw new ForbiddenException({
-        statusCode: 403,
-        message: 'You must accept the latest privacy policy to continue.',
-        error: 'Policy Acceptance Required',
-        // We can add the policy details here if needed by the client
-      });
-    }
-
-    // 6. If not required, allow the request
-    return true;
   }
 }

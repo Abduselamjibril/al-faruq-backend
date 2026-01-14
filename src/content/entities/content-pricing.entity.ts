@@ -9,7 +9,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { AccessType } from '../../common/enums/access-type.enum'; // --- [CHANGED] ---
+import { AccessType } from '../../common/enums/access-type.enum';
 
 export enum ContentPricingScope {
   EPISODE = 'EPISODE',
@@ -37,15 +37,26 @@ export class ContentPricing extends BaseEntity {
 
   @Column({
     type: 'enum',
-    enum: AccessType, // --- [CHANGED] ---
+    enum: AccessType,
   })
   accessType: AccessType;
 
   @Column({ type: 'integer', nullable: true })
   durationDays: number | null;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
-  price: number;
+  @Column({
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    comment: 'The base price set by the admin before any VAT considerations.',
+  })
+  basePrice: number;
+
+  @Column({
+    default: true,
+    comment: 'If true, VAT is added on top of the base price (customer pays).',
+  })
+  isVatAdded: boolean;
 
   @Column({ type: 'varchar', length: 10, default: 'ETB' })
   currency: string;

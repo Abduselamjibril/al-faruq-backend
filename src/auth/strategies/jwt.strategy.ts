@@ -6,6 +6,14 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { RoleName } from '../../roles/entities/role.entity';
 
+type JwtPayload = {
+  sub: string;
+  email: string;
+  role: RoleName;
+  permissions?: string[];
+  roles?: RoleName[];
+};
+
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(private configService: ConfigService) {
@@ -16,7 +24,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: { sub: string; email: string; role: RoleName }) {
-    return { id: payload.sub, email: payload.email, role: payload.role };
+  async validate(payload: JwtPayload) {
+    // Attach all relevant fields from payload to user object
+    return {
+      id: payload.sub,
+      email: payload.email,
+      role: payload.role,
+      permissions: payload.permissions,
+      roles: payload.roles,
+    };
   }
 }

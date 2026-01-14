@@ -50,8 +50,6 @@ export class User {
     return !!this.password;
   }
 
-  @Column({ default: false })
-  agreedToTerms: boolean;
 
   @Column({
     type: 'enum',

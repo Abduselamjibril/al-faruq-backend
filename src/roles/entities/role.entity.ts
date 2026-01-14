@@ -23,14 +23,15 @@ export class Role {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ type: 'enum', enum: RoleName, unique: true })
-  name: RoleName;
+  @Column({ type: 'varchar', unique: true })
+  name: string;
 
   @ManyToMany(() => User, (user) => user.roles)
   users: User[];
 
   @ManyToMany(() => Permission, (permission) => permission.roles, {
-    cascade: true, // Permissions are intrinsically linked to roles
+    cascade: true,
+    eager: true,
   })
   @JoinTable({
     name: 'role_permissions',

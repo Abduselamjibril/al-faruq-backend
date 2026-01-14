@@ -52,11 +52,17 @@ export class AuthService {
     private readonly privacyPolicyService: PrivacyPolicyService,
     @InjectRepository(UserSession)
     private userSessionRepository: Repository<UserSession>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
   ) {
+    // Initialize Google OAuth2 Client
     const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID') || '';
     this.googleClient = new OAuth2Client(clientId);
   }
 
+  /**
+   * Logout: Mark a session as inactive by sessionId
+   */
   async logout(sessionId: number): Promise<void> {
     const session = await this.userSessionRepository.findOne({
       where: { id: sessionId },
@@ -70,6 +76,9 @@ export class AuthService {
     this.logger.log(`Session logged out: sessionId=${sessionId}, userId=${session.user?.id}`);
   }
 
+  /**
+   * Admin: Force logout all sessions for a user (deactivate all active sessions)
+   */
   async forceLogoutAllSessions(userId: string): Promise<void> {
     const result = await this.userSessionRepository.update(
       { user: { id: userId }, active: true },
@@ -80,21 +89,26 @@ export class AuthService {
 
   async loginWithGoogleMobile(token: string): Promise<any> {
     this.logger.log('Starting Google Mobile Login flow...');
+
     try {
       const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID') || '';
+
       this.logger.debug('Verifying ID Token with Google...');
       const ticket = await this.googleClient.verifyIdToken({
         idToken: token,
         audience: clientId,
       });
+
       const payload = ticket.getPayload();
       if (!payload) {
         this.logger.error('Google Token payload was empty.');
         throw new BadRequestException('Invalid Google Token payload');
       }
+
       this.logger.debug(
         `Token verified. Email: ${payload.email}, Verified: ${payload.email_verified}`,
       );
+
       if (!payload.email_verified) {
         this.logger.warn(
           `Login blocked: Email ${payload.email} is not verified by Google.`,
@@ -103,6 +117,7 @@ export class AuthService {
           'Google email is not verified. Please verify your email with Google first.',
         );
       }
+
       const socialProfile: SocialProfile = {
         provider: 'google',
         providerId: payload.sub,
@@ -110,11 +125,14 @@ export class AuthService {
         firstName: payload.given_name || '',
         lastName: payload.family_name || '',
       };
+
       this.logger.log('Validating/Creating user from Social Profile...');
       const user = await this.validateSocialLogin(socialProfile);
       this.logger.log(`User processed successfully. ID: ${user.id}`);
+
       this.logger.debug(`Checking device limits for User ID: ${user.id}`);
       await this.checkDeviceLimit(user.id);
+
       this.logger.log('Generating JWT token...');
       return this.login(user);
     } catch (error) {
@@ -169,7 +187,6 @@ export class AuthService {
       firstName: profile.firstName,
       lastName: profile.lastName,
       roles: [defaultRole],
-      agreedToTerms: true,
       authProvider:
         profile.provider === 'google'
           ? AuthProvider.GOOGLE
@@ -194,17 +211,13 @@ export class AuthService {
         firstName: 'Guest',
         lastName: 'User',
         roles: [guestRole],
-        agreedToTerms: false,
         authProvider: AuthProvider.LOCAL,
         password: null,
       });
-      this.logger.log('Created new guest user.');
-    } else if (!guestUser.roles.some(r => r.name === RoleName.GUEST)) {
-        guestUser.roles.push(guestRole);
-        guestUser = await this.usersService.update(guestUser.id, { roles: guestUser.roles });
-        this.logger.log('Added GUEST role to existing guest user.');
+    } else if (!guestUser.roles.some((r) => r.name === RoleName.GUEST)) {
+      guestUser.roles.push(guestRole);
+      guestUser = await this.usersService.update(guestUser.id, { roles: guestUser.roles });
     }
-    this.logger.log(`Guest token requested. userId=${guestUser.id}`);
     return this.login(guestUser);
   }
 
@@ -246,15 +259,26 @@ export class AuthService {
 
   async validateUser(loginIdentifier: string, pass: string): Promise<any> {
     const user = await this.usersService.findByLoginIdentifier(loginIdentifier);
+
     if (user && user.password && (await bcrypt.compare(pass, user.password))) {
-      const { password, otp, otpExpiresAt, ...result } = user;
+      // Re-fetch user with all relations to ensure permissions are loaded
+      const fullUser = await this.userRepository.findOne({
+        where: { id: user.id },
+        relations: ['roles', 'roles.permissions'],
+      });
+      if (!fullUser) return null; // Should not happen, but for safety
+
+      const { password, otp, otpExpiresAt, ...result } = fullUser;
       return result;
     }
     return null;
   }
 
+  /**
+   * Limit concurrent logins to 3 per user.
+   */
   async login(user: User) {
-    const isUserRole = user.roles.some(role => role.name === RoleName.USER);
+    const isUserRole = user.roles.some((role) => role.name === RoleName.USER);
     if (isUserRole) {
       const activeSessions = await this.userSessionRepository.count({
         where: { user: { id: user.id }, active: true },
@@ -268,7 +292,7 @@ export class AuthService {
       }
     }
 
-    const isAdmin = user.roles.some(role => role.name === RoleName.ADMIN);
+    const isAdmin = user.roles.some((role) => role.name === RoleName.ADMIN);
     const mandatoryPolicy = await this.privacyPolicyService.getCurrentMandatoryPolicy();
     let requiresAcceptance = false;
     if (mandatoryPolicy && !isAdmin) {
@@ -285,17 +309,16 @@ export class AuthService {
     await this.userSessionRepository.save(session);
     this.logger.log(`Session created: userId=${user.id}, sessionId=${session.id}`);
 
-    // Flatten permissions from all roles into a single array of strings
     const permissions = user.roles.reduce((acc, role) => {
-        const rolePermissions = role.permissions ? role.permissions.map(p => p.name) : [];
-        return [...acc, ...rolePermissions];
+      const rolePermissions = role.permissions ? role.permissions.map((p) => p.name) : [];
+      return [...acc, ...rolePermissions];
     }, [] as string[]);
     const uniquePermissions = [...new Set(permissions)];
-    
+
     const payload = {
       email: user.email,
       sub: user.id,
-      roles: user.roles.map(role => role.name),
+      roles: user.roles.map((role) => role.name),
       permissions: uniquePermissions,
     };
 
@@ -303,10 +326,9 @@ export class AuthService {
       access_token: this.jwtService.sign(payload),
       message: 'Login successful',
       sessionId: session.id,
-      policyAcceptance: {
-        isRequired: requiresAcceptance,
-        policy: requiresAcceptance ? mandatoryPolicy : undefined,
-      },
+      requires_policy_acceptance: requiresAcceptance,
+      policy_version: requiresAcceptance && mandatoryPolicy ? mandatoryPolicy.version : null,
+      policy_url: requiresAcceptance && mandatoryPolicy ? mandatoryPolicy.documentUrl : null,
     };
   }
 
@@ -322,12 +344,15 @@ export class AuthService {
   async requestPasswordReset(email: string): Promise<void> {
     const lowercasedEmail = email.toLowerCase();
     const user = await this.usersService.findByEmail(lowercasedEmail);
+
     if (!user) {
       console.log(`Password reset requested for non-existent email: ${email}`);
       return;
     }
+
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
     const hashedOtp = await bcrypt.hash(otp, 10);
     await this.usersService.update(user.id, { otp: hashedOtp, otpExpiresAt });
     await this.mailService.sendPasswordResetOTP(user, otp);
@@ -336,8 +361,10 @@ export class AuthService {
 
   async resetPassword(resetDto: ResetPasswordDto): Promise<void> {
     const { email, otp, newPassword } = resetDto;
+
     const lowercasedEmail = email.toLowerCase();
     const user = await this.usersService.findByEmail(lowercasedEmail);
+
     if (
       !user ||
       !user.otp ||
@@ -346,10 +373,12 @@ export class AuthService {
     ) {
       throw new BadRequestException('Invalid or expired OTP');
     }
+
     const isOtpValid = await bcrypt.compare(otp, user.otp);
     if (!isOtpValid) {
       throw new BadRequestException('Invalid or expired OTP');
     }
+
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     await this.usersService.update(user.id, {
       password: hashedPassword,
@@ -364,15 +393,21 @@ export class AuthService {
   ): Promise<void> {
     const { currentPassword, newPassword } = changeDto;
     const user = await this.usersService.findById(userId);
+
     if (!user || !user.password) {
       throw new BadRequestException(
         'User not found or does not have a local password set.',
       );
     }
-    const isPasswordMatching = await bcrypt.compare(currentPassword, user.password);
+
+    const isPasswordMatching = await bcrypt.compare(
+      currentPassword,
+      user.password,
+    );
     if (!isPasswordMatching) {
       throw new UnauthorizedException('Incorrect current password');
     }
+
     const hashedNewPassword = await bcrypt.hash(newPassword, 10);
     await this.usersService.update(userId, { password: hashedNewPassword });
   }
@@ -380,11 +415,13 @@ export class AuthService {
   async setPassword(userId: string, setDto: SetPasswordDto): Promise<void> {
     const { newPassword } = setDto;
     const user = await this.usersService.findById(userId);
+
     if (user && user.password) {
       throw new BadRequestException(
         'User already has a password set. Please use the change-password endpoint.',
       );
     }
+
     const hashedNewPassword = await bcrypt.hash(newPassword, 10);
     await this.usersService.update(userId, { password: hashedNewPassword });
   }
@@ -395,17 +432,20 @@ export class AuthService {
   ): Promise<User> {
     const { email, newPassword, confirmPassword } = changeDto;
     const dataToUpdate: Partial<User> = {};
+
     if (!email && !newPassword) {
       throw new BadRequestException(
         'At least one field (email or newPassword) must be provided.',
       );
     }
+
     if (newPassword) {
       if (newPassword !== confirmPassword) {
         throw new BadRequestException('Passwords do not match');
       }
       dataToUpdate.password = await bcrypt.hash(newPassword, 10);
     }
+
     if (email) {
       const lowercasedEmail = email.toLowerCase();
       const existingUser = await this.usersService.findByEmail(lowercasedEmail);
@@ -414,6 +454,7 @@ export class AuthService {
       }
       dataToUpdate.email = lowercasedEmail;
     }
+
     return this.usersService.update(adminId, dataToUpdate);
   }
 }

@@ -168,7 +168,6 @@ export class SeedService {
       firstName: 'Admin',
       lastName: 'User',
       phoneNumber: '0000000000',
-      agreedToTerms: true,
       roles: [adminRole],
     });
 

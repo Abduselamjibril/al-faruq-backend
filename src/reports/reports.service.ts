@@ -1,16 +1,36 @@
 // src/reports/reports.service.ts
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, LessThan, Repository } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { DailySettlement, SettlementStatus } from './entities/daily-settlement.entity';
+import {
+  DailySettlement,
+  SettlementStatus,
+} from './entities/daily-settlement.entity';
 import { Purchase } from '../purchase/entities/purchase.entity';
 import { TransactionReportDto } from './dto/transaction-report.dto';
 import { DailySettlementReportDto } from './dto/daily-settlement-report.dto';
+import { ReconciliationReportDto } from './dto/reconciliation-report.dto';
+import {
+  StakeholderLedgerItemDto,
+  StakeholderLedgerResponseDto,
+  StakeholderSummaryDto,
+} from './dto/stakeholder-reports.dto';
+import { PaginationMetaDto } from '../utils/pagination.dto';
+
+// Define stakeholders for clarity and maintainability
+enum Stakeholder {
+  ALFARUQ = 'ALFARUQ',
+  SKYLINK = 'SKYLINK',
+}
 
 @Injectable()
 export class ReportsService {
   private readonly logger = new Logger(ReportsService.name);
+
+  // Define split percentages in one place
+  private readonly ALFARUQ_SHARE_PERCENTAGE = 0.7;
+  private readonly SKYLINK_SHARE_PERCENTAGE = 0.3;
 
   constructor(
     @InjectRepository(DailySettlement)
@@ -19,7 +39,7 @@ export class ReportsService {
     private readonly purchaseRepository: Repository<Purchase>,
   ) {}
 
-  // --- 1. AUTOMATED DAILY SETTLEMENT JOB ---
+  // --- 1. AUTOMATED DAILY SETTLEMENT JOB (REFACTORED) ---
   @Cron(CronExpression.EVERY_DAY_AT_1AM)
   async handleDailySettlement() {
     this.logger.log('Starting daily settlement job...');
@@ -34,7 +54,9 @@ export class ReportsService {
     });
 
     if (existingSettlement) {
-      this.logger.warn(`Settlement for ${yesterdayStr} already exists. Skipping.`);
+      this.logger.warn(
+        `Settlement for ${yesterdayStr} already exists. Skipping.`,
+      );
       return;
     }
 
@@ -52,36 +74,154 @@ export class ReportsService {
       });
 
       if (purchases.length === 0) {
-        this.logger.log(`No transactions found for ${yesterdayStr}. Skipping settlement creation.`);
+        this.logger.log(
+          `No transactions found for ${yesterdayStr}. Skipping settlement creation.`,
+        );
         return;
       }
 
-      const totalRevenue = purchases.reduce(
-        (sum, p) => sum + parseFloat(p.pricePaid.toString()),
-        0,
+      const totals = purchases.reduce(
+        (acc, p) => {
+          acc.totalGross += parseFloat(p.grossAmount.toString());
+          acc.totalNetSplit += parseFloat(p.netAmountForSplit.toString());
+          return acc;
+        },
+        { totalGross: 0, totalNetSplit: 0 },
       );
-      const totalTransactions = purchases.length;
-      const alFaruqShare = totalRevenue * 0.7;
-      const skylinkShare = totalRevenue * 0.3;
 
       const newSettlement = this.settlementRepository.create({
         settlementDate: yesterdayStr,
-        totalRevenue,
-        totalTransactions,
-        alFaruqShare,
-        skylinkShare,
+        totalRevenue: totals.totalGross, // totalRevenue now represents gross customer payments
+        totalTransactions: purchases.length,
+        alFaruqShare: totals.totalNetSplit * this.ALFARUQ_SHARE_PERCENTAGE,
+        skylinkShare: totals.totalNetSplit * this.SKYLINK_SHARE_PERCENTAGE,
         status: SettlementStatus.COMPLETED,
       });
 
       await this.settlementRepository.save(newSettlement);
-      this.logger.log(`Successfully created settlement for ${yesterdayStr}. Total Revenue: ${totalRevenue}`);
+      this.logger.log(
+        `Successfully created settlement for ${yesterdayStr}. Total Gross Revenue: ${totals.totalGross}`,
+      );
     } catch (error) {
-      this.logger.error(`Failed to run daily settlement for ${yesterdayStr}`, error.stack);
+      this.logger.error(
+        `Failed to run daily settlement for ${yesterdayStr}`,
+        error.stack,
+      );
     }
   }
 
-  // --- 2. DETAILED TRANSACTION REPORT ---
-  async getTransactionReport(startDate: string, endDate: string): Promise<TransactionReportDto> {
+  // --- 2. NEW: FINANCIAL RECONCILIATION REPORT (ADMIN) ---
+  async getReconciliationReport(
+    startDate: string,
+    endDate: string,
+  ): Promise<ReconciliationReportDto> {
+    const purchases = await this.purchaseRepository.find({
+      where: { createdAt: Between(new Date(startDate), new Date(endDate)) },
+    });
+
+    const report = purchases.reduce(
+      (acc, p) => {
+        const grossAmount = parseFloat(p.grossAmount.toString());
+        const baseAmount = parseFloat(p.baseAmount.toString());
+        const vatAmount = parseFloat(p.vatAmount.toString());
+        const transactionFee = parseFloat(p.transactionFee.toString());
+        const netForSplit = parseFloat(p.netAmountForSplit.toString());
+
+        acc.totalGrossRevenueCollected += grossAmount;
+        acc.totalBaseRevenue += baseAmount;
+        acc.totalVatCollected += vatAmount;
+        acc.totalTransactionFees += transactionFee;
+        acc.totalNetRevenueForSplit += netForSplit;
+
+        return acc;
+      },
+      {
+        totalGrossRevenueCollected: 0,
+        totalBaseRevenue: 0,
+        totalVatCollected: 0,
+        totalTransactionFees: 0,
+        totalNetRevenueForSplit: 0,
+      },
+    );
+
+    const alFaruqShare =
+      report.totalNetRevenueForSplit * this.ALFARUQ_SHARE_PERCENTAGE;
+    const skylinkShare =
+      report.totalNetRevenueForSplit * this.SKYLINK_SHARE_PERCENTAGE;
+
+    // The final check for accounting balance
+    const discrepancy =
+      report.totalNetRevenueForSplit - (alFaruqShare + skylinkShare);
+
+    return {
+      timeframe: { start: startDate, end: endDate },
+      totalGrossRevenueCollected: report.totalGrossRevenueCollected,
+      breakdown: {
+        totalBaseRevenue: report.totalBaseRevenue,
+        totalVatCollected: report.totalVatCollected,
+      },
+      totalTransactionFees: report.totalTransactionFees,
+      totalNetRevenueForSplit: report.totalNetRevenueForSplit,
+      split: {
+        alFaruqShare: alFaruqShare,
+        skylinkShare: skylinkShare,
+      },
+      discrepancy: parseFloat(discrepancy.toFixed(4)), // Use toFixed for precision issues
+    };
+  }
+
+  // --- 3. NEW: STAKEHOLDER DETAILED LEDGER ---
+  async getStakeholderLedger(
+    stakeholderId: string,
+    startDate: string,
+    endDate: string,
+    page: number,
+    limit: number,
+  ): Promise<StakeholderLedgerResponseDto> {
+    const { share, id } = this._getStakeholderInfo(stakeholderId);
+    const skip = (page - 1) * limit;
+
+    const [purchases, totalItems] = await this.purchaseRepository.findAndCount({
+      where: { createdAt: Between(new Date(startDate), new Date(endDate)) },
+      relations: ['content'],
+      order: { createdAt: 'DESC' },
+      take: limit,
+      skip,
+    });
+
+    const items: StakeholderLedgerItemDto[] = purchases.map((p) => {
+      const netForSplit = parseFloat(p.netAmountForSplit.toString());
+      return {
+        date: p.createdAt,
+        description: `Sale of '${p.content.title}'`,
+        contentId: p.content.id,
+        customerPaid: parseFloat(p.grossAmount.toString()),
+        vatPortion: parseFloat(p.vatAmount.toString()),
+        transactionFee: parseFloat(p.transactionFee.toString()),
+        netForSplit: netForSplit,
+        yourNetEarning: netForSplit * share,
+      };
+    });
+
+    const totalPages = Math.ceil(totalItems / limit);
+    const meta = new PaginationMetaDto({
+      itemCount: items.length,
+      totalItems,
+      itemsPerPage: limit,
+      totalPages,
+      currentPage: page,
+    });
+
+    return { meta, items };
+  }
+
+  // --- 4. LEGACY REPORTS (Can be deprecated or kept for historical comparison) ---
+  // Note: These are less accurate as they don't account for VAT/fees correctly.
+
+  async getTransactionReport(
+    startDate: string,
+    endDate: string,
+  ): Promise<TransactionReportDto> {
     const transactions = await this.purchaseRepository.find({
       where: {
         createdAt: Between(new Date(startDate), new Date(endDate)),
@@ -92,7 +232,8 @@ export class ReportsService {
 
     let totalRevenue = 0;
     const transactionDetails = transactions.map((tx) => {
-      const amountPaid = parseFloat(tx.pricePaid.toString());
+      const amountPaid = parseFloat(tx.grossAmount.toString());
+      const netForSplit = parseFloat(tx.netAmountForSplit.toString());
       totalRevenue += amountPaid;
 
       return {
@@ -100,8 +241,8 @@ export class ReportsService {
         chapaTransactionId: tx.chapaTransactionId,
         purchaseDate: tx.createdAt,
         amountPaid,
-        alFaruqShare: amountPaid * 0.7,
-        skylinkShare: amountPaid * 0.3,
+        alFaruqShare: netForSplit * this.ALFARUQ_SHARE_PERCENTAGE,
+        skylinkShare: netForSplit * this.SKYLINK_SHARE_PERCENTAGE,
         content: {
           id: tx.content.id,
           title: tx.content.title,
@@ -113,21 +254,28 @@ export class ReportsService {
       };
     });
 
+    const totalNetForSplit = transactions.reduce(
+      (sum, tx) => sum + parseFloat(tx.netAmountForSplit.toString()),
+      0,
+    );
+
     return {
       summary: {
         startDate,
         endDate,
         totalRevenue,
         totalTransactions: transactions.length,
-        alFaruqShare: totalRevenue * 0.7,
-        skylinkShare: totalRevenue * 0.3,
+        alFaruqShare: totalNetForSplit * this.ALFARUQ_SHARE_PERCENTAGE,
+        skylinkShare: totalNetForSplit * this.SKYLINK_SHARE_PERCENTAGE,
       },
       transactions: transactionDetails,
     };
   }
 
-  // --- 3. DAILY SETTLEMENTS REPORT ---
-  async getSettlementsReport(startDate: string, endDate: string): Promise<DailySettlementReportDto> {
+  async getSettlementsReport(
+    startDate: string,
+    endDate: string,
+  ): Promise<DailySettlementReportDto> {
     const start = startDate.split('T')[0];
     const end = endDate.split('T')[0];
 
@@ -162,5 +310,21 @@ export class ReportsService {
         skylinkShare: parseFloat(s.skylinkShare.toString()),
       })),
     };
+  }
+
+  // --- Private Helper ---
+  private _getStakeholderInfo(stakeholderId: string): {
+    share: number;
+    id: Stakeholder;
+  } {
+    if (stakeholderId.toUpperCase() === Stakeholder.ALFARUQ) {
+      return { share: this.ALFARUQ_SHARE_PERCENTAGE, id: Stakeholder.ALFARUQ };
+    }
+    if (stakeholderId.toUpperCase() === Stakeholder.SKYLINK) {
+      return { share: this.SKYLINK_SHARE_PERCENTAGE, id: Stakeholder.SKYLINK };
+    }
+    throw new NotFoundException(
+      `Stakeholder with ID '${stakeholderId}' not found.`,
+    );
   }
 }

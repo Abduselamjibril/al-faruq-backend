@@ -45,7 +45,32 @@ export class PendingTransaction extends BaseEntity {
   })
   accessType: AccessType;
 
+  // --- NEW FINANCIAL DETAILS ---
+  @Column({
+    type: 'decimal',
+    precision: 12,
+    scale: 2,
+    comment: 'The base price of the content before VAT.',
+  })
+  baseAmount: number;
+
+  @Column({
+    type: 'decimal',
+    precision: 12,
+    scale: 2,
+    comment: 'The VAT amount for this transaction.',
+  })
+  vatAmount: number;
+
+  @Column({
+    type: 'decimal',
+    precision: 12,
+    scale: 2,
+    comment: 'The final total amount charged to the customer (base + VAT).',
+  })
+  grossAmount: number;
+
   @CreateDateColumn()
-  @Index({ expireAfterSeconds: 86400 })
+  @Index({ expireAfterSeconds: 86400 }) // Expires after 24 hours
   createdAt: Date;
 }

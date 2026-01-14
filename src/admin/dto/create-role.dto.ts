@@ -1,15 +1,25 @@
 // src/admin/dto/create-role.dto.ts
 
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum } from 'class-validator';
-import { RoleName } from '../../roles/entities/role.entity';
+import { IsNotEmpty, IsString, IsArray, ArrayNotEmpty } from 'class-validator';
 
 export class CreateRoleDto {
   @ApiProperty({
-    description: 'The unique name for the new role.',
-    enum: RoleName,
-    example: RoleName.MODERATOR,
+    description: 'The unique name for the new role. Use uppercase and underscores (e.g., NEWS_EDITOR).',
+    example: 'NEWS_EDITOR',
   })
-  @IsEnum(RoleName)
-  name: RoleName;
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @ApiProperty({
+    description: 'List of permissions to assign to the role. Must be existing permissions.',
+    example: ['CREATE_NEWS', 'EDIT_NEWS'],
+    required: true,
+    type: [String],
+  })
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsString({ each: true })
+  permissions: string[];
 }

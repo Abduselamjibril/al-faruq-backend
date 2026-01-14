@@ -35,7 +35,10 @@ export class ContentService {
     private readonly usersService: UsersService,
   ) {}
 
-  async create(createContentDto: CreateContentDto, creatorId: string): Promise<Content> {
+  async create(
+    createContentDto: CreateContentDto,
+    creatorId: string,
+  ): Promise<Content> {
     const creator = await this.usersService.findById(creatorId);
     if (!creator) {
       throw new NotFoundException(`User with ID ${creatorId} not found.`);
@@ -45,7 +48,9 @@ export class ContentService {
     if (parentId) {
       const parent = await this.contentRepository.findOneBy({ id: parentId });
       if (!parent) {
-        throw new NotFoundException(`Parent content with ID ${parentId} not found.`);
+        throw new NotFoundException(
+          `Parent content with ID ${parentId} not found.`,
+        );
       }
     }
     const newContent = this.contentRepository.create({
@@ -61,9 +66,12 @@ export class ContentService {
   findAllTopLevel(): Promise<Content[]> {
     return this.contentRepository.find({
       where: [
-        { type: ContentType.MOVIE }, { type: ContentType.SERIES },
-        { type: ContentType.MUSIC_VIDEO }, { type: ContentType.DAWAH },
-        { type: ContentType.DOCUMENTARY }, { type: ContentType.PROPHET_HISTORY },
+        { type: ContentType.MOVIE },
+        { type: ContentType.SERIES },
+        { type: ContentType.MUSIC_VIDEO },
+        { type: ContentType.DAWAH },
+        { type: ContentType.DOCUMENTARY },
+        { type: ContentType.PROPHET_HISTORY },
         { type: ContentType.BOOK },
       ],
       relations: ['createdBy'],
@@ -72,12 +80,16 @@ export class ContentService {
   }
 
   async findOneWithHierarchy(id: string): Promise<Content> {
-    const content = await this.contentRepository.createQueryBuilder('content')
+    const content = await this.contentRepository
+      .createQueryBuilder('content')
       .leftJoinAndSelect('content.children', 'seasonsOrEpisodes')
       .leftJoinAndSelect('seasonsOrEpisodes.children', 'episodes')
       .leftJoinAndSelect('content.createdBy', 'creator') // Also fetch the creator's info
       .where('content.id = :id', { id })
-      .orderBy({ 'seasonsOrEpisodes.createdAt': 'ASC', 'episodes.createdAt': 'ASC' })
+      .orderBy({
+        'seasonsOrEpisodes.createdAt': 'ASC',
+        'episodes.createdAt': 'ASC',
+      })
       .getOne();
     if (!content) {
       throw new NotFoundException(`Content with ID ${id} not found.`);
@@ -85,21 +97,39 @@ export class ContentService {
     return content;
   }
 
-  async update(id: string, updateContentDto: UpdateContentDto, user: any): Promise<Content> {
+  async update(
+    id: string,
+    updateContentDto: UpdateContentDto,
+    user: any,
+  ): Promise<Content> {
     const content = await this._findContentById(id);
-    const canManageAll = user.permissions.includes(PERMISSIONS.CONTENT_MANAGE_ALL);
+    const canManageAll = user.permissions.includes(
+      PERMISSIONS.CONTENT_MANAGE_ALL,
+    );
 
     // If user is not an admin/moderator, check if they are the owner
     if (!canManageAll && content.createdBy?.id !== user.id) {
-        throw new ForbiddenException('You do not have permission to edit this content.');
+      throw new ForbiddenException(
+        'You do not have permission to edit this content.',
+      );
     }
 
     // Prevent uploader from editing content that is in review or published
-    if (!canManageAll && [ContentStatus.PENDING_REVIEW, ContentStatus.PUBLISHED].includes(content.status)) {
-        throw new ForbiddenException(`You cannot edit content that is in '${content.status}' status.`);
+    if (
+      !canManageAll &&
+      [ContentStatus.PENDING_REVIEW, ContentStatus.PUBLISHED].includes(
+        content.status,
+      )
+    ) {
+      throw new ForbiddenException(
+        `You cannot edit content that is in '${content.status}' status.`,
+      );
     }
 
-    const updatedContent = await this.contentRepository.preload({ id: id, ...updateContentDto });
+    const updatedContent = await this.contentRepository.preload({
+      id: id,
+      ...updateContentDto,
+    });
     if (!updatedContent) {
       throw new NotFoundException(`Content with ID ${id} not found.`);
     }
@@ -120,10 +150,14 @@ export class ContentService {
   async submitForReview(id: string, user: any): Promise<Content> {
     const content = await this._findContentById(id);
     if (content.createdBy?.id !== user.id) {
-        throw new ForbiddenException('You can only submit your own content for review.');
+      throw new ForbiddenException(
+        'You can only submit your own content for review.',
+      );
     }
     if (content.status !== ContentStatus.DRAFT) {
-        throw new BadRequestException(`Content must be in DRAFT status to be submitted for review. Current status: ${content.status}`);
+      throw new BadRequestException(
+        `Content must be in DRAFT status to be submitted for review. Current status: ${content.status}`,
+      );
     }
     content.status = ContentStatus.PENDING_REVIEW;
     content.submittedAt = new Date();
@@ -134,16 +168,23 @@ export class ContentService {
   async approveContent(id: string): Promise<Content> {
     const content = await this._findContentById(id);
     if (content.status !== ContentStatus.PENDING_REVIEW) {
-        throw new BadRequestException(`Content must be in PENDING_REVIEW status to be approved. Current status: ${content.status}`);
+      throw new BadRequestException(
+        `Content must be in PENDING_REVIEW status to be approved. Current status: ${content.status}`,
+      );
     }
     content.status = ContentStatus.PUBLISHED;
     return this.contentRepository.save(content);
   }
 
-  async rejectContent(id: string, rejectDto: RejectContentDto): Promise<Content> {
+  async rejectContent(
+    id: string,
+    rejectDto: RejectContentDto,
+  ): Promise<Content> {
     const content = await this._findContentById(id);
     if (content.status !== ContentStatus.PENDING_REVIEW) {
-        throw new BadRequestException(`Content must be in PENDING_REVIEW status to be rejected. Current status: ${content.status}`);
+      throw new BadRequestException(
+        `Content must be in PENDING_REVIEW status to be rejected. Current status: ${content.status}`,
+      );
     }
     content.status = ContentStatus.DRAFT;
     content.rejectionReason = rejectDto.rejectionReason;
@@ -153,39 +194,49 @@ export class ContentService {
   async archiveContent(id: string): Promise<Content> {
     const content = await this._findContentById(id);
     if (content.status !== ContentStatus.PUBLISHED) {
-        throw new BadRequestException(`Only PUBLISHED content can be archived. Current status: ${content.status}`);
+      throw new BadRequestException(
+        `Only PUBLISHED content can be archived. Current status: ${content.status}`,
+      );
     }
     content.status = ContentStatus.ARCHIVED;
     return this.contentRepository.save(content);
   }
-  
+
   async restoreContent(id: string): Promise<Content> {
     const content = await this._findContentById(id);
     if (content.status !== ContentStatus.ARCHIVED) {
-        throw new BadRequestException(`Only ARCHIVED content can be restored. Current status: ${content.status}`);
+      throw new BadRequestException(
+        `Only ARCHIVED content can be restored. Current status: ${content.status}`,
+      );
     }
     content.status = ContentStatus.PUBLISHED;
     return this.contentRepository.save(content);
   }
 
   // --- Pricing ---
-  
-  async lockContent(contentId: string, lockContentDto: LockContentDto): Promise<Content> {
+
+  async lockContent(
+    contentId: string,
+    lockContentDto: LockContentDto,
+  ): Promise<Content> {
     const content = await this.contentRepository.findOneBy({ id: contentId });
     if (!content) {
       throw new NotFoundException(`Content with ID ${contentId} not found.`);
     }
     const { permanentPrice, temporaryPrice } = lockContentDto;
     if (!permanentPrice && !temporaryPrice) {
-      throw new BadRequestException('You must provide at least one pricing option (permanent or temporary).');
+      throw new BadRequestException(
+        'You must provide at least one pricing option (permanent or temporary).',
+      );
     }
     await this.pricingRepository.update({ contentId }, { isActive: false });
-    if (permanentPrice !== undefined) {
+    if (permanentPrice) {
       await this.pricingRepository.save({
         contentId,
         contentType: content.type as unknown as ContentPricingScope,
         accessType: AccessType.PERMANENT,
-        price: permanentPrice,
+        basePrice: permanentPrice.price,
+        isVatAdded: permanentPrice.isVatAdded,
         durationDays: null,
         isActive: true,
       });
@@ -195,7 +246,8 @@ export class ContentService {
         contentId,
         contentType: content.type as unknown as ContentPricingScope,
         accessType: AccessType.TEMPORARY,
-        price: temporaryPrice.price,
+        basePrice: temporaryPrice.price,
+        isVatAdded: temporaryPrice.isVatAdded,
         durationDays: temporaryPrice.durationDays,
         isActive: true,
       });
@@ -218,10 +270,13 @@ export class ContentService {
     content.isLocked = false;
     return this.contentRepository.save(content);
   }
-  
+
   // --- Search ---
 
-  async searchTopLevelContent(query: string, type?: ContentType): Promise<Content[]> {
+  async searchTopLevelContent(
+    query: string,
+    type?: ContentType,
+  ): Promise<Content[]> {
     const searchTerm = `%${query.toLowerCase()}%`;
     const qb = this.contentRepository.createQueryBuilder('content');
     if (type) {
@@ -229,8 +284,12 @@ export class ContentService {
     } else {
       qb.where('content.type IN (:...types)', {
         types: [
-          ContentType.MOVIE, ContentType.SERIES, ContentType.MUSIC_VIDEO,
-          ContentType.DAWAH, ContentType.DOCUMENTARY, ContentType.PROPHET_HISTORY,
+          ContentType.MOVIE,
+          ContentType.SERIES,
+          ContentType.MUSIC_VIDEO,
+          ContentType.DAWAH,
+          ContentType.DOCUMENTARY,
+          ContentType.PROPHET_HISTORY,
           ContentType.BOOK,
         ],
       });
@@ -239,9 +298,13 @@ export class ContentService {
       new Brackets((subQb) => {
         subQb
           .where('LOWER(content.title) LIKE :searchTerm', { searchTerm })
-          .orWhere('LOWER(content.description) LIKE :searchTerm', { searchTerm })
+          .orWhere('LOWER(content.description) LIKE :searchTerm', {
+            searchTerm,
+          })
           .orWhere('LOWER(content.tags) LIKE :searchTerm', { searchTerm })
-          .orWhere('LOWER(content.authorName) LIKE :searchTerm', { searchTerm })
+          .orWhere('LOWER(content.authorName) LIKE :searchTerm', {
+            searchTerm,
+          })
           .orWhere('LOWER(content.genre) LIKE :searchTerm', { searchTerm });
       }),
     )
@@ -260,8 +323,10 @@ export class ContentService {
       })
       .andWhere(
         new Brackets((qb) => {
-          qb.where('LOWER(episode.title) LIKE :searchTerm', { searchTerm })
-            .orWhere('LOWER(parentContent.title) LIKE :searchTerm', { searchTerm });
+          qb.where('LOWER(episode.title) LIKE :searchTerm', { searchTerm }).orWhere(
+            'LOWER(parentContent.title) LIKE :searchTerm',
+            { searchTerm },
+          );
         }),
       )
       .orderBy('parentContent.title', 'ASC')

@@ -62,10 +62,4 @@ export class RegisterUserDto {
   @Match('password', { message: 'Passwords do not match' })
   confirmPassword: string;
 
-  @ApiProperty({
-    description: 'Must be true to indicate agreement to terms and conditions',
-    example: true,
-  })
-  @IsTrue({ message: 'You must agree to the terms and privacy policy' }) // <-- REPLACE @IsBoolean WITH @IsTrue
-  agreedToTerms: boolean;
 }

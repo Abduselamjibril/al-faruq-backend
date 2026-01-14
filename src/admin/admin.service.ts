@@ -25,7 +25,20 @@ export class AdminService {
     if (existingRole) {
       throw new ConflictException(`Role '${createRoleDto.name}' already exists.`);
     }
-    const role = this.roleRepository.create(createRoleDto);
+
+    // Find permissions by name
+    const permissions = await this.permissionRepository.find({
+      where: { name: In(createRoleDto.permissions) },
+    });
+
+    if (permissions.length !== createRoleDto.permissions.length) {
+      throw new NotFoundException('One or more permissions do not exist.');
+    }
+
+    const role = this.roleRepository.create({
+      name: createRoleDto.name,
+      permissions,
+    });
     return this.roleRepository.save(role);
   }
 
