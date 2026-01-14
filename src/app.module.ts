@@ -1,7 +1,7 @@
 // src/app.module.ts
 
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
@@ -31,8 +31,10 @@ import { QuranModule } from './quran/quran.module';
 import { BookmarkModule } from './bookmark/bookmark.module';
 import { EntitlementModule } from './entitlement/entitlement.module';
 import { PrivacyPolicyModule } from './privacy-policy/privacy-policy.module';
-import { AdminModule } from './admin/admin.module'; // --- [NEW] IMPORT ADMIN MODULE ---
-import { PermissionsModule } from './permissions/permissions.module'; // --- [NEW] IMPORT PERMISSIONS MODULE ---
+import { AdminModule } from './admin/admin.module';
+import { PermissionsModule } from './permissions/permissions.module';
+import { TermsOfServiceModule } from './terms-of-service/terms-of-service.module';
+import { redisStore } from 'cache-manager-redis-store';
 
 @Module({
   imports: [
@@ -41,10 +43,29 @@ import { PermissionsModule } from './permissions/permissions.module'; // --- [NE
     }),
     ScheduleModule.forRoot(),
 
-    CacheModule.register({
+    // --- [CORRECTED] THIS IS NOW THE ONLY CACHE MODULE REGISTRATION ---
+    CacheModule.registerAsync({
       isGlobal: true,
-      ttl: 3600 * 1000,
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: async (configService: ConfigService) => {
+        const host = configService.get<string>('REDIS_HOST');
+        const port = configService.get<number>('REDIS_PORT');
+        
+        console.log(`[CacheModule] Attempting to connect to Redis at ${host}:${port}`);
+        
+        return {
+          store: await redisStore({
+            socket: {
+              host: host,
+              port: port,
+            },
+            ttl: 3600, // Default TTL in seconds (1 hour)
+          }),
+        };
+      },
     }),
+    // --- [END OF CORRECTION] ---
 
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), 'uploads'),
@@ -54,7 +75,7 @@ import { PermissionsModule } from './permissions/permissions.module'; // --- [NE
     TypeOrmModule.forRoot(dataSourceOptions),
 
     // Application Modules
-    AdminModule, // --- [NEW] ADD THE ADMIN MODULE HERE ---
+    AdminModule,
     AuthModule,
     BookmarkModule,
     ContentModule,
@@ -66,7 +87,7 @@ import { PermissionsModule } from './permissions/permissions.module'; // --- [NE
     MailModule,
     NewsModule,
     NotificationsModule,
-    PermissionsModule, // --- [NEW] ADD THE PERMISSIONS MODULE HERE ---
+    PermissionsModule,
     PrivacyPolicyModule,
     PurchaseModule,
     QuranModule,
@@ -74,6 +95,7 @@ import { PermissionsModule } from './permissions/permissions.module'; // --- [NE
     ReportsModule,
     SearchModule,
     SeedModule,
+    TermsOfServiceModule,
     UploadModule,
     UsersModule,
     YoutubeModule,

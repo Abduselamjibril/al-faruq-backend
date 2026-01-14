@@ -16,6 +16,7 @@ import { UserNotificationStatus } from '../../notifications/entities/user-notifi
 import { UserSession } from '../../auth/entities/user-session.entity';
 import { Bookmark } from '../../bookmark/entities/bookmark.entity';
 import { Content } from '../../content/entities/content.entity';
+import { TermsOfServiceAcceptance } from '../../terms-of-service/entities/terms-of-service-acceptance.entity';
 
 export enum AuthProvider {
   LOCAL = 'LOCAL',
@@ -101,4 +102,9 @@ export class User {
 
   @OneToMany(() => Content, (content) => content.createdBy)
   createdContent: Content[];
+  @OneToMany(
+    () => TermsOfServiceAcceptance,
+    (acceptance) => acceptance.user,
+  )
+  tosAcceptances: TermsOfServiceAcceptance[];
 }

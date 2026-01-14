@@ -47,6 +47,7 @@ import { ForceLogoutDto } from './dto/force-logout.dto';
 import { PermissionsGuard } from './guards/permissions.guard';
 import { Permissions } from './decorators/permissions.decorator';
 import { PERMISSIONS } from '../database/seed.service';
+import { SkipTosCheck } from '../terms-of-service/decorators/skip-tos-check.decorator'; // --- [NEW] ---
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -58,6 +59,7 @@ export class AuthController {
     private readonly configService: ConfigService,
   ) {}
 
+  @SkipTosCheck() // --- [NEW] ---
   @ApiOperation({ summary: 'Register a new user' })
   @ApiResponse({ status: 201, description: 'User successfully created.' })
   @ApiResponse({ status: 400, description: 'Invalid input data.' })
@@ -67,6 +69,7 @@ export class AuthController {
     return this.authService.register(registerDto);
   }
 
+  @SkipTosCheck() // --- [NEW] ---
   @ApiOperation({ summary: 'Log in a user' })
   @ApiBody({ type: LoginUserDto })
   @ApiResponse({ status: 200, description: 'Login successful, returns JWT token.' })
@@ -80,6 +83,7 @@ export class AuthController {
     return this.authService.login(req.user);
   }
 
+  @SkipTosCheck() // --- [NEW] ---
   @ApiOperation({ summary: 'Logout and deactivate a session' })
   @ApiResponse({ status: 200, description: 'Session logged out successfully.' })
   @ApiResponse({ status: 400, description: 'Invalid session ID.' })
@@ -94,6 +98,7 @@ export class AuthController {
     return { message: 'Logged out successfully.' };
   }
 
+  @SkipTosCheck() // --- [NEW] ---
   @ApiOperation({ summary: 'Login with Google ID Token (Mobile)' })
   @ApiResponse({ status: 200, description: 'Login successful, returns JWT.' })
   @ApiResponse({ status: 401, description: 'Invalid Token.' })
@@ -102,6 +107,7 @@ export class AuthController {
     return this.authService.loginWithGoogleMobile(loginDto.token);
   }
 
+  @SkipTosCheck() // --- [NEW] ---
   @ApiOperation({ summary: 'Request a password reset OTP' })
   @ApiResponse({ status: 200, description: 'A confirmation message is always returned.' })
   @HttpCode(HttpStatus.OK)
@@ -111,6 +117,7 @@ export class AuthController {
     return { message: 'If an account with that email exists, a password reset OTP has been sent.' };
   }
 
+  @SkipTosCheck() // --- [NEW] ---
   @ApiOperation({ summary: 'Reset password using an OTP' })
   @ApiResponse({ status: 200, description: 'Password reset successfully.' })
   @ApiResponse({ status: 400, description: 'Invalid or expired OTP.' })
@@ -121,12 +128,14 @@ export class AuthController {
     return { message: 'Password has been reset successfully.' };
   }
 
+  @SkipTosCheck() // --- [NEW] ---
   @ApiOperation({ summary: 'Initiate Google SSO flow' })
   @ApiResponse({ status: 302, description: 'Redirects to Google for authentication.' })
   @Get('google')
   @UseGuards(GoogleAuthGuard)
   async googleAuth() {}
 
+  @SkipTosCheck() // --- [NEW] ---
   @ApiExcludeEndpoint()
   @Get('google/callback')
   @UseGuards(GoogleAuthGuard)
@@ -136,12 +145,14 @@ export class AuthController {
     res.redirect(`${frontendUrl}/auth/callback?token=${access_token}`);
   }
 
+  @SkipTosCheck() // --- [NEW] ---
   @ApiOperation({ summary: 'Initiate Facebook SSO flow' })
   @ApiResponse({ status: 302, description: 'Redirects to Facebook for authentication.' })
   @Get('facebook')
   @UseGuards(FacebookAuthGuard)
   async facebookAuth() {}
 
+  @SkipTosCheck() // --- [NEW] ---
   @ApiExcludeEndpoint()
   @Get('facebook/callback')
   @UseGuards(FacebookAuthGuard)
@@ -242,6 +253,7 @@ export class AuthController {
     return { message: 'All sessions for user have been logged out.' };
   }
 
+  @SkipTosCheck() // --- [NEW] ---
   @ApiOperation({ summary: 'Get a guest token (no credentials required)' })
   @ApiResponse({ status: 200, description: 'Returns a JWT token for guest access.' })
   @Post('guest-token')

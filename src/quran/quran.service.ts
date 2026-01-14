@@ -46,6 +46,7 @@ export class QuranService {
    * This is ideal for the client to fetch once and cache.
    */
   async getQuranStructure(): Promise<Juz[]> {
+    console.log('>>> SERVICE: Querying database for Quran structure...');
     return this.juzRepository.find({
       relations: ['surahs'],
       order: { id: 'ASC', surahs: { id: 'ASC' } },

@@ -1,14 +1,14 @@
-// src/quran/quran.controller.ts
-
 import {
   Controller,
   Get,
+  Inject,
   Param,
   ParseIntPipe,
   ParseUUIDPipe,
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { CACHE_MANAGER, Cache } from '@nestjs/cache-manager';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -34,7 +34,10 @@ import { RoleName } from '../roles/entities/role.entity';
 // [REMOVED] No security decorators at the controller level
 @Controller('quran')
 export class QuranController {
-  constructor(private readonly quranService: QuranService) {}
+  constructor(private readonly quranService: QuranService,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+  ) {}
+
 
   @Public() // This decorator ensures guards like a global JWT guard would be skipped.
   @Get('structure')
@@ -46,9 +49,27 @@ export class QuranController {
     description: 'Returns a nested list of all 30 Juz and their 114 Surahs.',
     type: [Juz],
   })
-  getQuranStructure(): Promise<Juz[]> {
-    return this.quranService.getQuranStructure();
+async getQuranStructure(): Promise<Juz[]> {
+    const cacheKey = 'quran_structure';
+
+    // This manual logic will now work correctly
+    const cachedData = await this.cacheManager.get<Juz[]>(cacheKey);
+
+    if (cachedData) {
+      console.log('--- SUCCESS: Serving Quran structure from CACHE! ---');
+      return cachedData;
+    }
+
+    console.log('--- INFO: Quran structure not in cache. Fetching from database... ---');
+    const dbData = await this.quranService.getQuranStructure();
+
+    await this.cacheManager.set(cacheKey, dbData, 86400);
+
+    return dbData;
   }
+
+
+  
 
   @Public()
   @Get('languages')
@@ -58,8 +79,17 @@ export class QuranController {
     description: 'Returns a list of languages.',
     type: [Language],
   })
-  getAvailableLanguages(): Promise<Language[]> {
-    return this.quranService.getAvailableLanguages();
+  async getAvailableLanguages(): Promise<Language[]> {
+    const cacheKey = 'quran_languages';
+    const cachedData = await this.cacheManager.get<Language[]>(cacheKey);
+    if (cachedData) {
+      console.log('--- SUCCESS: Serving available languages from CACHE! ---');
+      return cachedData;
+    }
+    console.log('--- INFO: Languages not in cache. Fetching from database... ---');
+    const dbData = await this.quranService.getAvailableLanguages();
+    await this.cacheManager.set(cacheKey, dbData, 86400); // Cache for 24 hours
+    return dbData;
   }
 
   @Public()
@@ -72,8 +102,19 @@ export class QuranController {
     description: 'Returns a list of reciter profiles.',
     type: [Reciter],
   })
-  getReciters(@Query() query: ReciterQueryDto): Promise<Reciter[]> {
-    return this.quranService.getReciters(query.languageId);
+  async getReciters(@Query() query: ReciterQueryDto): Promise<Reciter[]> {
+    // Create a dynamic key. If languageId is null, it becomes 'reciters_lang_all'
+    const cacheKey = `reciters_lang_${query.languageId || 'all'}`;
+    
+    const cachedData = await this.cacheManager.get<Reciter[]>(cacheKey);
+    if (cachedData) {
+      console.log(`--- SUCCESS: Serving reciters from CACHE! (Key: ${cacheKey}) ---`);
+      return cachedData;
+    }
+    console.log(`--- INFO: Reciters not in cache. Fetching from database... (Key: ${cacheKey}) ---`);
+    const dbData = await this.quranService.getReciters(query.languageId);
+    await this.cacheManager.set(cacheKey, dbData, 86400); // Cache for 24 hours
+    return dbData;
   }
 
   // --- [CORRECT] Security is now applied ONLY to this endpoint ---

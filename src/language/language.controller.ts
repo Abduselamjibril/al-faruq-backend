@@ -1,5 +1,3 @@
-// src/language/language.controller.ts
-
 import {
   Controller,
   Get,
@@ -10,7 +8,9 @@ import {
   Delete,
   UseGuards,
   ParseUUIDPipe,
+  Inject, // --- [NEW] ---
 } from '@nestjs/common';
+import { CACHE_MANAGER, Cache } from '@nestjs/cache-manager'; // --- [NEW] ---
 import { LanguageService } from './language.service';
 import { CreateLanguageDto } from './dto/create-language.dto';
 import { UpdateLanguageDto } from './dto/update-language.dto';
@@ -33,43 +33,52 @@ import { PERMISSIONS } from '../database/seed.service';
 @Permissions(PERMISSIONS.LANGUAGE_MANAGE)
 @Controller('languages')
 export class LanguageController {
-  constructor(private readonly languageService: LanguageService) {}
+  constructor(
+    private readonly languageService: LanguageService,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache, // --- [NEW] ---
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Create a new language' })
-  @ApiBody({ description: 'Data for creating a new language.', type: CreateLanguageDto })
-  @ApiResponse({ status: 201, description: 'The language has been successfully created.', type: Language })
-  @ApiResponse({ status: 400, description: 'Invalid input data.' })
-  @ApiResponse({ status: 403, description: 'Forbidden. Missing permissions.' })
-  @ApiResponse({ status: 409, description: 'A language with this name or code already exists.' })
   create(@Body() createLanguageDto: CreateLanguageDto) {
     return this.languageService.create(createLanguageDto);
   }
 
+  // --- Endpoint with Caching ---
   @Get()
   @ApiOperation({ summary: 'Get all available languages' })
   @ApiResponse({ status: 200, description: 'A list of all languages.', type: [Language] })
   @ApiResponse({ status: 403, description: 'Forbidden. Missing permissions.' })
-  findAll() {
-    return this.languageService.findAll();
+  async findAll() { // --- [MODIFIED] Must be async ---
+    // --- [NEW CACHING LOGIC] ---
+    const cacheKey = 'all_languages';
+    
+    const cachedData = await this.cacheManager.get<Language[]>(cacheKey);
+    if (cachedData) {
+      console.log(`--- SUCCESS: Serving all languages from CACHE! ---`);
+      return cachedData;
+    }
+
+    console.log(`--- INFO: Languages not in cache. Fetching from database... ---`);
+    const dbData = await this.languageService.findAll();
+    
+    // Cache languages for 24 hours (86400 seconds)
+    await this.cacheManager.set(cacheKey, dbData, 86400);
+
+    return dbData;
+    // --- [END OF NEW CACHING LOGIC] ---
   }
+
+  // --- Other Admin Endpoints (Unchanged) ---
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a single language by its ID' })
-  @ApiResponse({ status: 200, description: 'Details of the language.', type: Language })
-  @ApiResponse({ status: 403, description: 'Forbidden. Missing permissions.' })
-  @ApiResponse({ status: 404, description: 'Language not found.' })
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.languageService.findOne(id);
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update an existing language' })
-  @ApiBody({ description: 'Data for updating a language. All fields are optional.', type: UpdateLanguageDto })
-  @ApiResponse({ status: 200, description: 'The language has been successfully updated.', type: Language })
-  @ApiResponse({ status: 403, description: 'Forbidden. Missing permissions.' })
-  @ApiResponse({ status: 404, description: 'Language not found.' })
-  @ApiResponse({ status: 409, description: 'Another language with this name or code already exists.' })
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateLanguageDto: UpdateLanguageDto,
@@ -79,9 +88,6 @@ export class LanguageController {
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a language' })
-  @ApiResponse({ status: 200, description: 'The language has been successfully deleted.' })
-  @ApiResponse({ status: 403, description: 'Forbidden. Missing permissions.' })
-  @ApiResponse({ status: 404, description: 'Language not found.' })
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.languageService.remove(id);
   }
