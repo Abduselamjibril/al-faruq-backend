@@ -117,4 +117,18 @@ export class TermsOfServiceController {
   activate(@Param('id') id: string) {
     return this.termsOfServiceService.activate(id);
   }
+   @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(RoleName.ADMIN)
+  @ApiBearerAuth()
+  @Patch('admin/:id/make-mandatory')
+  @ApiOperation({
+    summary: 'ADMIN: Make a ToS version mandatory',
+    description: 'Sets a specific ToS version as mandatory for all users. Any other version will be made non-mandatory.',
+  })
+  @ApiResponse({ status: 200, description: 'The ToS version was made mandatory.' })
+  @ApiResponse({ status: 403, description: 'Forbidden.' })
+  @ApiResponse({ status: 404, description: 'ToS version not found.' })
+  makeMandatory(@Param('id') id: string) {
+    return this.termsOfServiceService.makeMandatory(id);
+  }
 }

@@ -48,6 +48,7 @@ import { PermissionsGuard } from './guards/permissions.guard';
 import { Permissions } from './decorators/permissions.decorator';
 import { PERMISSIONS } from '../database/seed.service';
 import { SkipTosCheck } from '../terms-of-service/decorators/skip-tos-check.decorator'; // --- [NEW] ---
+import { TermsOfServiceGuard } from 'src/terms-of-service/guards/terms-of-service.guard';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -194,23 +195,22 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiResponse({ status: 200, description: 'Returns the user profile.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  @ApiResponse({ status: 403, description: 'Forbidden.' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @ApiResponse({ status: 403, description: 'Forbidden (or ToS not accepted).' })
+  // --- [THE FIX] Add the TermsOfServiceGuard here, at the end of the list ---
+  @UseGuards(JwtAuthGuard, RolesGuard, TermsOfServiceGuard)
   @Roles(RoleName.USER)
   @Get('profile')
   getProfile(@Request() req) {
     return this.usersService.findById(req.user.id);
   }
 
-  @Delete('profile')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  // --- [THE FIX] Also protect the delete endpoint ---
+  @UseGuards(JwtAuthGuard, RolesGuard, TermsOfServiceGuard)
   @Roles(RoleName.USER)
+  @Delete('profile')
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete the account of the current logged-in user (User Only)' })
-  @ApiResponse({ status: 200, description: 'User account successfully deleted.' })
-  @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  @ApiResponse({ status: 403, description: 'Forbidden.' })
   async deleteProfile(@Request() req) {
     await this.usersService.remove(req.user.id);
     return { message: 'User account successfully deleted.' };

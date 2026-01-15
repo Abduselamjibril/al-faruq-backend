@@ -72,4 +72,25 @@ export class TermsOfServiceService {
     tosToActivate.isActive = true;
     return this.tosRepository.save(tosToActivate);
   }
+async makeMandatory(id: string): Promise<TermsOfService> {
+    const tosToMakeMandatory = await this.tosRepository.findOneBy({ id });
+    if (!tosToMakeMandatory) {
+      throw new NotFoundException(`Terms of Service with ID ${id} not found`);
+    }
+
+    await this.tosRepository.manager.transaction(async (transactionalEntityManager) => {
+        await transactionalEntityManager.update(
+            TermsOfService, 
+            { isMandatory: true },
+            { isMandatory: false }
+        );
+        
+        tosToMakeMandatory.isMandatory = true;
+        await transactionalEntityManager.save(tosToMakeMandatory);
+    });
+
+    // We refetch the entity. We use '!' to assert that it's not null,
+    // because we know it exists.
+    return (await this.tosRepository.findOneBy({ id }))!; // <-- THE FIX
+  }
 }

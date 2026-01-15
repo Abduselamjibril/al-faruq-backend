@@ -8,8 +8,7 @@ import { SeedService } from './database/seed.service';
 import { QuranSeederService } from './quran/quran-seeder.service';
 import { PolicyAcceptanceGuard } from './privacy-policy/guards/policy-acceptance.guard';
 import { PrivacyPolicyService } from './privacy-policy/privacy-policy.service';
-import { TermsOfServiceGuard } from './terms-of-service/guards/terms-of-service.guard'; // --- [NEW] IMPORT ---
-import { TermsOfServiceService } from './terms-of-service/terms-of-service.service'; // --- [NEW] IMPORT ---
+
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -47,14 +46,11 @@ async function bootstrap() {
   // 1. Privacy Policy Guard
   const policyService = app.get(PrivacyPolicyService);
 
-  // 2. Terms of Service Guard
-  const tosService = app.get(TermsOfServiceService); // --- [NEW] GET SERVICE ---
-
   app.useGlobalGuards(
     new PolicyAcceptanceGuard(reflector, policyService),
-    new TermsOfServiceGuard(reflector, tosService), // --- [NEW] ADD GUARD HERE ---
+    
   );
-  // --- END OF GLOBAL GUARDS ---
+ 
 
   // Swagger (OpenAPI) Setup
   const config = new DocumentBuilder()

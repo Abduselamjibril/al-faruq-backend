@@ -16,20 +16,19 @@ export class TermsOfServiceGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    // Check for the @SkipTosCheck() decorator on the handler or class.
     const skipTosCheck = this.reflector.getAllAndOverride<boolean>(
       SKIP_TOS_CHECK_KEY,
       [context.getHandler(), context.getClass()],
     );
     if (skipTosCheck) {
-      return true; // Skip the check entirely.
+      return true;
     }
 
     const request = context.switchToHttp().getRequest();
     const user = request.user;
 
-    // If there's no user, another guard (like JwtAuthGuard) should handle it.
     // This guard only applies to authenticated users.
+    // If there's no user, let it pass; JwtAuthGuard will handle it.
     if (!user) {
       return true;
     }
@@ -37,7 +36,7 @@ export class TermsOfServiceGuard implements CanActivate {
     // Is there a mandatory ToS to check against?
     const mandatoryTos = await this.tosService.findActiveMandatory();
     if (!mandatoryTos) {
-      return true; // No mandatory ToS, so access is granted.
+      return true; // No mandatory ToS exists, so all users are compliant.
     }
 
     // Has this user accepted this specific mandatory ToS?
@@ -46,10 +45,10 @@ export class TermsOfServiceGuard implements CanActivate {
       mandatoryTos.id,
     );
     if (hasAccepted) {
-      return true; // User has accepted, access is granted.
+      return true; // User has accepted, allow the request.
     }
 
-    // If we reach here, the user has NOT accepted. Block access.
+    // If we reach here, the user has not accepted. Block access.
     throw new ForbiddenException({
       message: 'You must accept the latest Terms of Service to continue.',
       errorCode: 'TOS_NOT_ACCEPTED',
