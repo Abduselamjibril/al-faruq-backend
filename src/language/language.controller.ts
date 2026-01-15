@@ -8,9 +8,9 @@ import {
   Delete,
   UseGuards,
   ParseUUIDPipe,
-  Inject, // --- [NEW] ---
+  Inject,
 } from '@nestjs/common';
-import { CACHE_MANAGER, Cache } from '@nestjs/cache-manager'; // --- [NEW] ---
+import { CACHE_MANAGER, Cache } from '@nestjs/cache-manager';
 import { LanguageService } from './language.service';
 import { CreateLanguageDto } from './dto/create-language.dto';
 import { UpdateLanguageDto } from './dto/update-language.dto';
@@ -26,31 +26,33 @@ import { Language } from '../content/entities/language.entity';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { PERMISSIONS } from '../database/seed.service';
+import { Public } from '../auth/decorators/public.decorator'; // Import Public decorator
 
 @ApiTags('Language Management (Admin)')
-@ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PermissionsGuard)
-@Permissions(PERMISSIONS.LANGUAGE_MANAGE)
 @Controller('languages')
 export class LanguageController {
   constructor(
     private readonly languageService: LanguageService,
-    @Inject(CACHE_MANAGER) private cacheManager: Cache, // --- [NEW] ---
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a new language' })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PERMISSIONS.LANGUAGE_MANAGE)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'ADMIN: Create a new language' })
   create(@Body() createLanguageDto: CreateLanguageDto) {
     return this.languageService.create(createLanguageDto);
   }
 
   // --- Endpoint with Caching ---
+  // Note: This endpoint is now public to allow general access for caching.
+  // The admin-specific guards have been removed from this specific GET route.
+  @Public()
   @Get()
   @ApiOperation({ summary: 'Get all available languages' })
   @ApiResponse({ status: 200, description: 'A list of all languages.', type: [Language] })
-  @ApiResponse({ status: 403, description: 'Forbidden. Missing permissions.' })
-  async findAll() { // --- [MODIFIED] Must be async ---
-    // --- [NEW CACHING LOGIC] ---
+  async findAll(): Promise<Language[]> {
     const cacheKey = 'all_languages';
     
     const cachedData = await this.cacheManager.get<Language[]>(cacheKey);
@@ -66,19 +68,24 @@ export class LanguageController {
     await this.cacheManager.set(cacheKey, dbData, 86400);
 
     return dbData;
-    // --- [END OF NEW CACHING LOGIC] ---
   }
 
   // --- Other Admin Endpoints (Unchanged) ---
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get a single language by its ID' })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PERMISSIONS.LANGUAGE_MANAGE)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'ADMIN: Get a single language by its ID' })
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.languageService.findOne(id);
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Update an existing language' })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PERMISSIONS.LANGUAGE_MANAGE)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'ADMIN: Update an existing language' })
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateLanguageDto: UpdateLanguageDto,
@@ -87,7 +94,10 @@ export class LanguageController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete a language' })
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PERMISSIONS.LANGUAGE_MANAGE)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'ADMIN: Delete a language' })
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.languageService.remove(id);
   }

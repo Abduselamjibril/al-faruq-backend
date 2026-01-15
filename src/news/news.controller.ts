@@ -9,9 +9,9 @@ import {
   Query,
   UseGuards,
   ParseUUIDPipe,
-  Inject, // --- [NEW] ---
+  Inject,
 } from '@nestjs/common';
-import { CACHE_MANAGER, Cache } from '@nestjs/cache-manager'; // --- [NEW] ---
+import { CACHE_MANAGER, Cache } from '@nestjs/cache-manager';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -35,19 +35,18 @@ import { PERMISSIONS } from '../database/seed.service';
 export class NewsController {
   constructor(
     private readonly newsService: NewsService,
-    @Inject(CACHE_MANAGER) private cacheManager: Cache, // --- [NEW] ---
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {}
 
-  // --- Public Endpoint ---
+  // --- Public Endpoint with Caching ---
 
   @Public()
   @Get()
   @ApiOperation({ summary: 'Get a paginated list of the latest news articles' })
   @ApiResponse({ status: 200, description: 'A paginated list of news articles.', type: PaginationResponseDto })
-  async findAll( // --- [MODIFIED] Must be async ---
+  async findAll(
     @Query() query: NewsQueryDto,
   ): Promise<PaginationResponseDto<News>> {
-    // --- [NEW CACHING LOGIC] ---
     const queryParamsString = `page=${query.page || 1}&limit=${query.limit || 10}`;
     const cacheKey = `news_list_${queryParamsString}`;
 
@@ -64,7 +63,6 @@ export class NewsController {
     await this.cacheManager.set(cacheKey, dbData, 300); 
 
     return dbData;
-    // --- [END OF NEW CACHING LOGIC] ---
   }
 
   // --- Admin Endpoints (Unchanged) ---
@@ -73,7 +71,7 @@ export class NewsController {
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @Permissions(PERMISSIONS.NEWS_MANAGE)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Create a new news article (Admin Only)' })
+  @ApiOperation({ summary: 'ADMIN: Create a new news article' })
   create(@Body() createNewsDto: CreateNewsDto): Promise<News> {
     return this.newsService.create(createNewsDto);
   }
@@ -82,7 +80,7 @@ export class NewsController {
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @Permissions(PERMISSIONS.NEWS_MANAGE)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Update an existing news article (Admin Only)' })
+  @ApiOperation({ summary: 'ADMIN: Update an existing news article' })
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateNewsDto: UpdateNewsDto,
@@ -94,7 +92,7 @@ export class NewsController {
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @Permissions(PERMISSIONS.NEWS_MANAGE)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Delete a news article (Admin Only)' })
+  @ApiOperation({ summary: 'ADMIN: Delete a news article' })
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.newsService.remove(id);
   }
