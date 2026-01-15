@@ -37,6 +37,20 @@ export enum ContentStatus {
   ARCHIVED = 'ARCHIVED',
 }
 
+// --- [NEW] ---
+// Define the types for our new media structure.
+export enum ContentMediaType {
+  THUMBNAIL = 'THUMBNAIL',
+  POSTER = 'POSTER',
+}
+
+export interface ContentMediaItem {
+  url: string;
+  type: ContentMediaType;
+  isPrimary: boolean;
+}
+// --- [END NEW] ---
+
 @Entity('content')
 export class Content extends BaseEntity {
   @PrimaryGeneratedColumn('uuid')
@@ -50,6 +64,16 @@ export class Content extends BaseEntity {
 
   @Column({ type: 'varchar', nullable: true })
   thumbnailUrl: string | null;
+
+  // --- [NEW] ---
+  // This new 'jsonb' column will store our array of media items.
+  @Column({
+    type: 'jsonb',
+    nullable: true,
+    comment: 'Array of media items (thumbnails, posters)',
+  })
+  media: ContentMediaItem[] | null;
+  // --- [END NEW] ---
 
   @Column({ type: 'varchar', nullable: true })
   videoUrl: string | null;
