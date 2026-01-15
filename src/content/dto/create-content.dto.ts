@@ -10,9 +10,71 @@ import {
   Min,
   ValidateIf,
   IsUrl,
+  IsBoolean,
+  IsArray,
+  ValidateNested,
+  Validate,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
+  ValidationArguments,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ContentStatus, ContentType } from '../entities/content.entity';
+import {
+  ContentStatus,
+  ContentType,
+  ContentMediaType,
+} from '../entities/content.entity';
+import { Type } from 'class-transformer';
+
+// --- [NEW] ---
+// DTO for a single media item with validation.
+export class ContentMediaItemDto {
+  @ApiProperty({
+    description: 'The public URL of the media file.',
+    example: 'https://cdn.example.com/images/poster1.jpg',
+  })
+  @IsUrl()
+  @IsNotEmpty()
+  url: string;
+
+  @ApiProperty({
+    description: 'The type of the media (THUMBNAIL or POSTER).',
+    enum: ContentMediaType,
+    example: ContentMediaType.POSTER,
+  })
+  @IsEnum(ContentMediaType)
+  @IsNotEmpty()
+  type: ContentMediaType;
+
+  @ApiProperty({
+    description: 'Specifies if this is the primary thumbnail. Only one thumbnail per content item can be primary.',
+    example: false,
+  })
+  @IsBoolean()
+  isPrimary: boolean;
+}
+
+// --- [NEW] ---
+// Custom validator to enforce the business rule that only one thumbnail can be primary.
+@ValidatorConstraint({ name: 'IsOnePrimaryThumbnail', async: false })
+export class IsOnePrimaryThumbnailConstraint implements ValidatorConstraintInterface {
+  validate(media: ContentMediaItemDto[], args: ValidationArguments) {
+    // If media is not provided or not an array, this rule passes (other validators will catch it).
+    if (!media || !Array.isArray(media)) {
+      return true;
+    }
+    // Filter to find how many items are marked as a primary thumbnail.
+    const primaryThumbnails = media.filter(
+      (item) => item.type === ContentMediaType.THUMBNAIL && item.isPrimary,
+    );
+    // The validation passes if there are 0 or 1 primary thumbnails.
+    return primaryThumbnails.length <= 1;
+  }
+
+  defaultMessage(args: ValidationArguments) {
+    return 'There can be at most one primary thumbnail.';
+  }
+}
 
 export class CreateContentDto {
   @ApiProperty({
@@ -82,7 +144,7 @@ export class CreateContentDto {
   @ApiPropertyOptional({
     description:
       'YouTube video or audio URL (can be provided instead of a direct videoUrl).',
-    example: 'https://www.youtube.com/watch?v=some_id',
+    example: 'https://www.youtube.com/watch?v=...',
   })
   @IsUrl()
   @IsOptional()
@@ -128,24 +190,22 @@ export class CreateContentDto {
   @IsOptional()
   duration?: number;
 
+  // --- [REMOVED] The old thumbnailUrl property has been replaced by the 'media' array below. ---
+  // thumbnailUrl?: string;
+
+  // --- [NEW] ---
+  // This new property accepts an array of media objects.
   @ApiPropertyOptional({
-    description: 'The URL of the thumbnail image (for all top-level content).',
-    example: 'https://cdn.example.com/images/inception-poster.jpg',
+    description: 'A list of media items (posters and thumbnails). The order of items will be preserved.',
+    type: [ContentMediaItemDto],
   })
-  @ValidateIf((o) =>
-    [
-      ContentType.MOVIE,
-      ContentType.MUSIC_VIDEO,
-      ContentType.SERIES,
-      ContentType.DAWAH,
-      ContentType.DOCUMENTARY,
-      ContentType.PROPHET_HISTORY,
-      ContentType.BOOK,
-    ].includes(o.type),
-  )
-  @IsUrl()
   @IsOptional()
-  thumbnailUrl?: string;
+  @IsArray()
+  @ValidateNested({ each: true }) // Ensures each object in the array is validated.
+  @Type(() => ContentMediaItemDto) // Necessary for class-validator to know the type of the objects.
+  @Validate(IsOnePrimaryThumbnailConstraint) // Applies our custom validation rule.
+  media?: ContentMediaItemDto[];
+  // --- [END NEW] ---
 
   @ApiPropertyOptional({
     description: 'The URL of the trailer video file.',

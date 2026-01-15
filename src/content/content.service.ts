@@ -8,7 +8,12 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository } from 'typeorm';
-import { Content, ContentStatus, ContentType } from './entities/content.entity';
+import {
+  Content,
+  ContentStatus,
+  ContentType,
+  ContentMediaType,
+} from './entities/content.entity';
 import { CreateContentDto } from './dto/create-content.dto';
 import { UpdateContentDto } from './dto/update-content.dto';
 import { Language } from './entities/language.entity';
@@ -44,6 +49,7 @@ export class ContentService {
       throw new NotFoundException(`User with ID ${creatorId} not found.`);
     }
 
+    // The DTO no longer has thumbnailUrl, it's now part of the main object.
     const { parentId, status, ...restDto } = createContentDto;
     if (parentId) {
       const parent = await this.contentRepository.findOneBy({ id: parentId });
@@ -54,12 +60,18 @@ export class ContentService {
       }
     }
     const newContent = this.contentRepository.create({
-      ...restDto,
+      ...restDto, // 'media' array is now part of restDto
       parentId,
       createdBy: creator,
       status: status || ContentStatus.DRAFT, // Default to DRAFT if not provided
       submittedAt: status === ContentStatus.PENDING_REVIEW ? new Date() : null,
     });
+
+    // --- [NEW] ---
+    // Synchronize the legacy thumbnailUrl before saving.
+    this.synchronizeThumbnailUrl(newContent);
+    // --- [END NEW] ---
+
     return this.contentRepository.save(newContent);
   }
 
@@ -126,6 +138,7 @@ export class ContentService {
       );
     }
 
+    // Preload merges the existing entity with the new data from the DTO.
     const updatedContent = await this.contentRepository.preload({
       id: id,
       ...updateContentDto,
@@ -133,6 +146,12 @@ export class ContentService {
     if (!updatedContent) {
       throw new NotFoundException(`Content with ID ${id} not found.`);
     }
+
+    // --- [NEW] ---
+    // Synchronize the legacy thumbnailUrl after the data has been merged, before saving.
+    this.synchronizeThumbnailUrl(updatedContent);
+    // --- [END NEW] ---
+
     return this.contentRepository.save(updatedContent);
   }
 
@@ -347,4 +366,26 @@ export class ContentService {
     }
     return content;
   }
+
+  // --- [NEW] ---
+  /**
+   * A helper method to ensure the legacy `thumbnailUrl` field is always
+   * in sync with the `media` array's primary thumbnail.
+   * This method directly mutates the content object passed to it.
+   * @param content The content entity to synchronize.
+   */
+  private synchronizeThumbnailUrl(content: Content): void {
+    if (content.media && content.media.length > 0) {
+      // Find the first media item that is a thumbnail and is marked as primary.
+      const primaryThumbnail = content.media.find(
+        (item) => item.type === ContentMediaType.THUMBNAIL && item.isPrimary,
+      );
+      // If a primary thumbnail is found, set its URL. Otherwise, set to null.
+      content.thumbnailUrl = primaryThumbnail ? primaryThumbnail.url : null;
+    } else {
+      // If the media array is empty or null, ensure the legacy field is also null.
+      content.thumbnailUrl = null;
+    }
+  }
+  // --- [END NEW] ---
 }
