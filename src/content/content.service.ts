@@ -249,27 +249,51 @@ export class ContentService {
       );
     }
     await this.pricingRepository.update({ contentId }, { isActive: false });
+    // Upsert permanent price
     if (permanentPrice) {
-      await this.pricingRepository.save({
-        contentId,
-        contentType: content.type as unknown as ContentPricingScope,
-        accessType: AccessType.PERMANENT,
-        basePrice: permanentPrice.price,
-        isVatAdded: permanentPrice.isVatAdded,
-        durationDays: null,
-        isActive: true,
+      let permPricing = await this.pricingRepository.findOne({
+        where: { contentId, accessType: AccessType.PERMANENT },
       });
+      if (permPricing) {
+        permPricing.basePrice = permanentPrice.price;
+        permPricing.isVatAdded = permanentPrice.isVatAdded ?? false;
+        permPricing.durationDays = null;
+        permPricing.isActive = true;
+        await this.pricingRepository.save(permPricing);
+      } else {
+        await this.pricingRepository.save({
+          contentId,
+          contentType: content.type as unknown as ContentPricingScope,
+          accessType: AccessType.PERMANENT,
+          basePrice: permanentPrice.price,
+          isVatAdded: permanentPrice.isVatAdded,
+          durationDays: null,
+          isActive: true,
+        });
+      }
     }
+    // Upsert temporary price
     if (temporaryPrice) {
-      await this.pricingRepository.save({
-        contentId,
-        contentType: content.type as unknown as ContentPricingScope,
-        accessType: AccessType.TEMPORARY,
-        basePrice: temporaryPrice.price,
-        isVatAdded: temporaryPrice.isVatAdded,
-        durationDays: temporaryPrice.durationDays,
-        isActive: true,
+      let tempPricing = await this.pricingRepository.findOne({
+        where: { contentId, accessType: AccessType.TEMPORARY },
       });
+      if (tempPricing) {
+        tempPricing.basePrice = temporaryPrice.price;
+        tempPricing.isVatAdded = temporaryPrice.isVatAdded ?? false;
+        tempPricing.durationDays = temporaryPrice.durationDays;
+        tempPricing.isActive = true;
+        await this.pricingRepository.save(tempPricing);
+      } else {
+        await this.pricingRepository.save({
+          contentId,
+          contentType: content.type as unknown as ContentPricingScope,
+          accessType: AccessType.TEMPORARY,
+          basePrice: temporaryPrice.price,
+          isVatAdded: temporaryPrice.isVatAdded,
+          durationDays: temporaryPrice.durationDays,
+          isActive: true,
+        });
+      }
     }
     content.isLocked = true;
     const savedContent = await this.contentRepository.save(content);
