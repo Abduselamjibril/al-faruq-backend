@@ -9,6 +9,7 @@ import {
   IsUrl,
   IsUUID,
 } from 'class-validator';
+import { Trim, Escape } from 'class-sanitizer';
 import { SurahEnum } from '../enums/surah.enum';
 
 export class CreateTafsirDto {

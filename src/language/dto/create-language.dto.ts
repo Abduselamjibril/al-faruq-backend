@@ -2,6 +2,7 @@
 
 import { ApiProperty } from '@nestjs/swagger';
 import { IsNotEmpty, IsString, Length } from 'class-validator';
+import { Trim, Escape } from 'class-sanitizer';
 
 export class CreateLanguageDto {
   @ApiProperty({

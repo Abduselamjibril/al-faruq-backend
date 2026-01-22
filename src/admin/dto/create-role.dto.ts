@@ -24,7 +24,7 @@ export class CreateRoleDto {
   @IsArray()
   @ArrayNotEmpty()
   @IsString({ each: true })
-  @Trim({ each: true })
-  @Escape({ each: true })
+  @Trim()
+  @Escape()
   permissions: string[];
 }

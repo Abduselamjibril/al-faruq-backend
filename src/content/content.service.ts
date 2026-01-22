@@ -21,7 +21,6 @@ import {
   ContentPricing,
   ContentPricingScope,
 } from './entities/content-pricing.entity';
-import { ContentType } from './entities/content.entity';
 import { LockContentDto } from './dto/lock-content.dto';
 import { AccessType } from '../common/enums/access-type.enum';
 import { User } from '../users/entities/user.entity';
