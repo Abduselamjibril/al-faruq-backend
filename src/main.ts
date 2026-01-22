@@ -1,4 +1,3 @@
-
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { AppModule } from './app.module';
@@ -8,7 +7,7 @@ import { SeedService } from './database/seed.service';
 import { QuranSeederService } from './quran/quran-seeder.service';
 import { PolicyAcceptanceGuard } from './privacy-policy/guards/policy-acceptance.guard';
 import { PrivacyPolicyService } from './privacy-policy/privacy-policy.service';
-
+import helmet from 'helmet';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -67,6 +66,13 @@ async function bootstrap() {
   const quranSeeder = app.get(QuranSeederService);
   await seeder.seedDatabase();
   await quranSeeder.seedQuranStructure();
+
+  // Allow cross-origin resource loading for static assets (uploads)
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );
 
   await app.listen(5000);
   console.log(`Application is now running on: ${await app.getUrl()}`);

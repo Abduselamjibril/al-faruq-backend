@@ -2,6 +2,7 @@
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsBoolean, IsOptional, IsString, Matches } from 'class-validator';
+import { Trim, Escape } from 'class-sanitizer';
 
 export class UpdateReminderDto {
   @ApiPropertyOptional({
@@ -18,6 +19,8 @@ export class UpdateReminderDto {
   })
   @IsString()
   @IsOptional()
+  @Trim()
+  @Escape()
   message?: string;
 
   @ApiPropertyOptional({
@@ -29,5 +32,7 @@ export class UpdateReminderDto {
     message: 'Time must be in HH:mm format (e.g., 09:30 or 18:00)',
   })
   @IsOptional()
+  @Trim()
+  @Escape()
   time?: string;
 }

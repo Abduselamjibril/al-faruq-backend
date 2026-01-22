@@ -18,6 +18,8 @@ export class CreateTafsirDto {
   })
   @IsString()
   @IsNotEmpty()
+  @Trim()
+  @Escape()
   title: string;
 
   @ApiProperty({
@@ -27,6 +29,8 @@ export class CreateTafsirDto {
   })
   @IsString()
   @IsOptional()
+  @Trim()
+  @Escape()
   subtitle?: string;
 
 

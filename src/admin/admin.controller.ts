@@ -1,6 +1,6 @@
 // src/admin/admin.controller.ts
 
-import { Controller, Get, Post, Body, Param, ParseIntPipe, UseGuards, Patch, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, ParseIntPipe, UseGuards, Patch, ParseUUIDPipe, Logger } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
@@ -16,6 +16,7 @@ import { AssignRolesToUserDto } from './dto/assign-roles-to-user.dto';
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('admin')
 export class AdminController {
+  private readonly logger = new Logger(AdminController.name);
   constructor(private readonly adminService: AdminService) {}
 
   @Post('roles')
@@ -24,7 +25,9 @@ export class AdminController {
   @ApiResponse({ status: 201, description: 'Role created successfully.'})
   @ApiResponse({ status: 403, description: 'Forbidden. Missing permissions.'})
   createRole(@Body() createRoleDto: CreateRoleDto) {
-    return this.adminService.createRole(createRoleDto);
+    const result = this.adminService.createRole(createRoleDto);
+    this.logger.log(`Admin action: Created role name=${createRoleDto.name}`);
+    return result;
   }
 
   @Get('roles')
@@ -45,7 +48,9 @@ export class AdminController {
     @Param('id', ParseIntPipe) id: number,
     @Body() assignPermissionsDto: AssignPermissionsToRoleDto,
   ) {
-    return this.adminService.assignPermissionsToRole(id, assignPermissionsDto.permissionIds);
+    const result = this.adminService.assignPermissionsToRole(id, assignPermissionsDto.permissionIds);
+    this.logger.log(`Admin action: Assigned permissions to roleId=${id}`);
+    return result;
   }
 
   @Get('permissions')
@@ -66,6 +71,8 @@ export class AdminController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() assignRolesDto: AssignRolesToUserDto,
   ) {
-    return this.adminService.assignRolesToUser(id, assignRolesDto.roleIds);
+    const result = this.adminService.assignRolesToUser(id, assignRolesDto.roleIds);
+    this.logger.log(`Admin action: Assigned roles to userId=${id}`);
+    return result;
   }
 }

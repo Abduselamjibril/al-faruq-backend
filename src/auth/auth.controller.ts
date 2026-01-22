@@ -49,6 +49,7 @@ import { Permissions } from './decorators/permissions.decorator';
 import { PERMISSIONS } from '../database/seed.service';
 import { SkipTosCheck } from '../terms-of-service/decorators/skip-tos-check.decorator'; // --- [NEW] ---
 import { TermsOfServiceGuard } from 'src/terms-of-service/guards/terms-of-service.guard';
+import { Throttle } from '@nestjs/throttler';
 
 @ApiTags('Auth')
 @Controller('auth')

@@ -5,12 +5,12 @@ services:
       dockerfile: Dockerfile
     container_name: alfaruq_api
     ports:
-      - "5001:5000"
+      - "${API_PORT_EXTERNAL}:${API_PORT_INTERNAL}"
     env_file:
       - .env
     environment:
       REDIS_HOST: redis
-      REDIS_PORT: 6379
+      REDIS_PORT: ${REDIS_PORT}
     volumes:
       - ./firebase-service-account.json:/usr/src/app/firebase-service-account.json:ro
       - ./templates:/usr/src/app/templates
@@ -24,7 +24,7 @@ services:
     image: redis:7
     container_name: alfaruq_redis
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT}:${REDIS_PORT}"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -37,7 +37,7 @@ services:
     image: postgres:15-alpine
     container_name: alfaruq_db
     ports:
-      - "5459:5432"
+      - "${DB_PORT_EXTERNAL}:${DB_PORT}"
     environment:
       POSTGRES_USER: ${DB_USERNAME}
       POSTGRES_PASSWORD: ${DB_PASSWORD}

@@ -34,10 +34,20 @@ import { PrivacyPolicyModule } from './privacy-policy/privacy-policy.module';
 import { AdminModule } from './admin/admin.module';
 import { PermissionsModule } from './permissions/permissions.module';
 import { TermsOfServiceModule } from './terms-of-service/terms-of-service.module';
+
+import { ThrottlerModule } from '@nestjs/throttler';
 import { redisStore } from 'cache-manager-redis-store';
 
 @Module({
   imports: [
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          limit: 100, // max requests per ttl per IP
+          ttl: 60,    // time to live in seconds
+        },
+      ],
+    }),
     ConfigModule.forRoot({
       isGlobal: true,
     }),

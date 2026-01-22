@@ -224,21 +224,27 @@ export class AuthService {
   async register(registerDto: RegisterUserDto): Promise<User> {
     const { password, confirmPassword, phoneNumber, email, ...rest } = registerDto;
     if (password !== confirmPassword) {
+      this.logger.warn(`Registration failed: Passwords do not match for email=${email}`);
       throw new BadRequestException('Passwords do not match');
     }
     if (phoneNumber) {
       const existingPhone = await this.usersService.findByPhoneNumber(phoneNumber);
       if (existingPhone) {
+        this.logger.warn(`Registration failed: Phone number already in use (${phoneNumber})`);
         throw new ConflictException('Phone number already in use');
       }
     }
-    const lowercasedEmail = email.toLowerCase();
-    const existingEmail = await this.usersService.findByEmail(lowercasedEmail);
-    if (existingEmail) {
-      throw new ConflictException('Email already in use');
+    const lowercasedEmail = email ? email.toLowerCase() : undefined;
+    if (lowercasedEmail) {
+      const existingEmail = await this.usersService.findByEmail(lowercasedEmail);
+      if (existingEmail) {
+        this.logger.warn(`Registration failed: Email already in use (${lowercasedEmail})`);
+        throw new ConflictException('Email already in use');
+      }
     }
     const defaultRole = await this.rolesService.findByName(RoleName.USER);
     if (!defaultRole) {
+      this.logger.error('Registration failed: Default user role not found.');
       throw new InternalServerErrorException('Default user role not found.');
     }
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -246,31 +252,36 @@ export class AuthService {
       const user = await this.usersService.create({
         ...rest,
         phoneNumber,
-        email: lowercasedEmail,
+        ...(lowercasedEmail ? { email: lowercasedEmail } : {}),
         password: hashedPassword,
         authProvider: AuthProvider.LOCAL,
         roles: [defaultRole],
       });
+      this.logger.log(`User registered successfully: userId=${user.id}, email=${user.email}`);
       return user;
     } catch (error) {
+      this.logger.error(`Registration failed for email=${lowercasedEmail}: ${error.message}`);
       throw new InternalServerErrorException('Could not create user');
     }
   }
 
   async validateUser(loginIdentifier: string, pass: string): Promise<any> {
     const user = await this.usersService.findByLoginIdentifier(loginIdentifier);
-
     if (user && user.password && (await bcrypt.compare(pass, user.password))) {
       // Re-fetch user with all relations to ensure permissions are loaded
       const fullUser = await this.userRepository.findOne({
         where: { id: user.id },
         relations: ['roles', 'roles.permissions'],
       });
-      if (!fullUser) return null; // Should not happen, but for safety
-
+      if (!fullUser) {
+        this.logger.error(`Login failed: User not found after password match. loginIdentifier=${loginIdentifier}`);
+        return null;
+      }
+      this.logger.log(`Login successful: userId=${fullUser.id}, email=${fullUser.email}`);
       const { password, otp, otpExpiresAt, ...result } = fullUser;
       return result;
     }
+    this.logger.warn(`Login failed: Invalid credentials for loginIdentifier=${loginIdentifier}`);
     return null;
   }
 
@@ -344,47 +355,43 @@ export class AuthService {
   async requestPasswordReset(email: string): Promise<void> {
     const lowercasedEmail = email.toLowerCase();
     const user = await this.usersService.findByEmail(lowercasedEmail);
-
     if (!user) {
-      console.log(`Password reset requested for non-existent email: ${email}`);
+      this.logger.warn(`Password reset requested for non-existent email: ${email}`);
       return;
     }
-
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-
     const hashedOtp = await bcrypt.hash(otp, 10);
     await this.usersService.update(user.id, { otp: hashedOtp, otpExpiresAt });
     await this.mailService.sendPasswordResetOTP(user, otp);
-    console.log(`OTP for ${user.email}: ${otp}`);
+    this.logger.log(`Password reset OTP sent: userId=${user.id}, email=${user.email}`);
   }
 
   async resetPassword(resetDto: ResetPasswordDto): Promise<void> {
     const { email, otp, newPassword } = resetDto;
-
     const lowercasedEmail = email.toLowerCase();
     const user = await this.usersService.findByEmail(lowercasedEmail);
-
     if (
       !user ||
       !user.otp ||
       !user.otpExpiresAt ||
       user.otpExpiresAt < new Date()
     ) {
+      this.logger.warn(`Password reset failed: Invalid or expired OTP for email=${email}`);
       throw new BadRequestException('Invalid or expired OTP');
     }
-
     const isOtpValid = await bcrypt.compare(otp, user.otp);
     if (!isOtpValid) {
+      this.logger.warn(`Password reset failed: Invalid OTP for userId=${user?.id}, email=${email}`);
       throw new BadRequestException('Invalid or expired OTP');
     }
-
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     await this.usersService.update(user.id, {
       password: hashedPassword,
       otp: undefined,
       otpExpiresAt: undefined,
     });
+    this.logger.log(`Password reset successful: userId=${user.id}, email=${user.email}`);
   }
 
   async changePassword(
@@ -393,23 +400,23 @@ export class AuthService {
   ): Promise<void> {
     const { currentPassword, newPassword } = changeDto;
     const user = await this.usersService.findById(userId);
-
     if (!user || !user.password) {
+      this.logger.warn(`Change password failed: User not found or no password set. userId=${userId}`);
       throw new BadRequestException(
         'User not found or does not have a local password set.',
       );
     }
-
     const isPasswordMatching = await bcrypt.compare(
       currentPassword,
       user.password,
     );
     if (!isPasswordMatching) {
+      this.logger.warn(`Change password failed: Incorrect current password. userId=${userId}`);
       throw new UnauthorizedException('Incorrect current password');
     }
-
     const hashedNewPassword = await bcrypt.hash(newPassword, 10);
     await this.usersService.update(userId, { password: hashedNewPassword });
+    this.logger.log(`Password changed successfully: userId=${userId}`);
   }
 
   async setPassword(userId: string, setDto: SetPasswordDto): Promise<void> {

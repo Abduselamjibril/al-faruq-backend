@@ -21,6 +21,7 @@ import {
   ContentPricing,
   ContentPricingScope,
 } from './entities/content-pricing.entity';
+import { ContentType } from './entities/content.entity';
 import { LockContentDto } from './dto/lock-content.dto';
 import { AccessType } from '../common/enums/access-type.enum';
 import { User } from '../users/entities/user.entity';
@@ -263,7 +264,7 @@ export class ContentService {
       } else {
         await this.pricingRepository.save({
           contentId,
-          contentType: content.type as unknown as ContentPricingScope,
+          contentType: this._toPricingScope(content.type),
           accessType: AccessType.PERMANENT,
           basePrice: permanentPrice.price,
           isVatAdded: permanentPrice.isVatAdded,
@@ -286,7 +287,7 @@ export class ContentService {
       } else {
         await this.pricingRepository.save({
           contentId,
-          contentType: content.type as unknown as ContentPricingScope,
+          contentType: this._toPricingScope(content.type),
           accessType: AccessType.TEMPORARY,
           basePrice: temporaryPrice.price,
           isVatAdded: temporaryPrice.isVatAdded,
@@ -302,6 +303,28 @@ export class ContentService {
     savedContent.pdfUrl = null;
     savedContent.youtubeUrl = null;
     return savedContent;
+  }
+
+  private _toPricingScope(type: ContentType): ContentPricingScope {
+    switch (type) {
+      case ContentType.SERIES:
+        return ContentPricingScope.SERIES;
+      case ContentType.SEASON:
+        return ContentPricingScope.SEASON;
+      case ContentType.EPISODE:
+      case ContentType.PROPHET_HISTORY_EPISODE:
+        return ContentPricingScope.EPISODE;
+      case ContentType.BOOK:
+        return ContentPricingScope.BOOK;
+      // Treat single-video-like types as MOVIE for pricing scope
+      case ContentType.MOVIE:
+      case ContentType.MUSIC_VIDEO:
+      case ContentType.DAWAH:
+      case ContentType.DOCUMENTARY:
+      case ContentType.PROPHET_HISTORY:
+      default:
+        return ContentPricingScope.MOVIE;
+    }
   }
 
   async unlockContent(id: string): Promise<Content> {

@@ -18,6 +18,8 @@ import {
   ValidatorConstraintInterface,
   ValidationArguments,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { escapeHtml } from '../../common/utils/sanitize.util';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ContentStatus,
@@ -83,6 +85,8 @@ export class CreateContentDto {
   })
   @IsString()
   @IsNotEmpty()
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  @Transform(({ value }) => typeof value === 'string' ? escapeHtml(value) : value)
   title: string;
 
   @ApiPropertyOptional({
@@ -93,6 +97,8 @@ export class CreateContentDto {
   @IsNotEmpty()
   @IsString()
   @IsOptional()
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  @Transform(({ value }) => typeof value === 'string' ? escapeHtml(value) : value)
   description?: string;
 
   @ApiProperty({
@@ -221,6 +227,8 @@ export class CreateContentDto {
   })
   @IsOptional()
   @IsString()
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  @Transform(({ value }) => typeof value === 'string' ? escapeHtml(value) : value)
   tags?: string;
 
   @ApiPropertyOptional({
@@ -230,6 +238,8 @@ export class CreateContentDto {
   @ValidateIf((o) => o.type === ContentType.BOOK)
   @IsString()
   @IsOptional()
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  @Transform(({ value }) => typeof value === 'string' ? escapeHtml(value) : value)
   authorName?: string;
   
   @ApiPropertyOptional({
@@ -238,6 +248,8 @@ export class CreateContentDto {
   })
   @IsString()
   @IsOptional()
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  @Transform(({ value }) => typeof value === 'string' ? escapeHtml(value) : value)
   about?: string;
   
   @ApiPropertyOptional({
@@ -246,6 +258,8 @@ export class CreateContentDto {
   })
   @IsString()
   @IsOptional()
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  @Transform(({ value }) => typeof value === 'string' ? escapeHtml(value) : value)
   genre?: string;
 
   @ApiPropertyOptional({

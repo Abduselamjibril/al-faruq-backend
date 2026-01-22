@@ -10,6 +10,7 @@ import {
   IsBoolean,
   MinLength,
 } from 'class-validator';
+import { Trim, Escape } from 'class-sanitizer';
 
 export class CreatePrivacyPolicyDto {
   @ApiProperty({
@@ -19,6 +20,8 @@ export class CreatePrivacyPolicyDto {
   @IsString()
   @IsNotEmpty()
   @MinLength(3)
+  @Trim()
+  @Escape()
   title: string;
 
   @ApiProperty({
@@ -27,6 +30,8 @@ export class CreatePrivacyPolicyDto {
   })
   @IsString()
   @IsNotEmpty()
+  @Trim()
+  @Escape()
   version: string;
 
   @ApiProperty({
@@ -36,6 +41,8 @@ export class CreatePrivacyPolicyDto {
   })
   @IsString()
   @IsOptional()
+  @Trim()
+  @Escape()
   description?: string;
 
   @ApiProperty({

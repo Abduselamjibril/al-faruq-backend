@@ -1,6 +1,8 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import { Trim, Escape } from 'class-sanitizer';
 import { Match } from '../decorators/match.decorator';
+import { IsStrongPassword } from '../decorators/is-strong-password.decorator';
 
 export class ChangeAdminCredentialsDto {
   @ApiPropertyOptional({
@@ -9,6 +11,8 @@ export class ChangeAdminCredentialsDto {
   })
   @IsOptional()
   @IsEmail()
+  @Trim()
+  @Escape()
   email?: string;
 
   @ApiPropertyOptional({
@@ -18,6 +22,9 @@ export class ChangeAdminCredentialsDto {
   @IsOptional()
   @IsString()
   @MinLength(8, { message: 'Password must be at least 8 characters long' })
+  @IsStrongPassword({ message: 'Password must include uppercase, lowercase, number, and special character.' })
+  @Trim()
+  @Escape()
   newPassword?: string;
 
   @ApiPropertyOptional({
@@ -26,6 +33,9 @@ export class ChangeAdminCredentialsDto {
   })
   @IsOptional()
   @IsString()
+  @IsStrongPassword({ message: 'Password must include uppercase, lowercase, number, and special character.' })
   @Match('newPassword', { message: 'Passwords do not match' })
+  @Trim()
+  @Escape()
   confirmPassword?: string;
 }

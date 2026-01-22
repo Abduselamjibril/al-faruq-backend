@@ -1,6 +1,7 @@
 // src/auth/dto/forgot-password.dto.ts
 
 import { ApiProperty } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import { IsEmail, IsNotEmpty } from 'class-validator';
 
 export class ForgotPasswordDto {
@@ -10,5 +11,6 @@ export class ForgotPasswordDto {
   })
   @IsEmail()
   @IsNotEmpty()
+  @Transform(({ value }) => typeof value === 'string' ? value.trim().toLowerCase() : value)
   email: string;
 }

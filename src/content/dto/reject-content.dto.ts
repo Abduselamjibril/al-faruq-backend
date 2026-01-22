@@ -2,6 +2,7 @@
 
 import { ApiProperty } from '@nestjs/swagger';
 import { IsNotEmpty, IsString, MinLength } from 'class-validator';
+import { Trim, Escape } from 'class-sanitizer';
 
 export class RejectContentDto {
   @ApiProperty({
@@ -11,5 +12,7 @@ export class RejectContentDto {
   @IsString()
   @IsNotEmpty()
   @MinLength(10)
+  @Trim()
+  @Escape()
   rejectionReason: string;
 }

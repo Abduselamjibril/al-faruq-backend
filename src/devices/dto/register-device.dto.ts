@@ -2,6 +2,7 @@
 
 import { ApiProperty } from '@nestjs/swagger';
 import { IsNotEmpty, IsString } from 'class-validator';
+import { Trim, Escape } from 'class-sanitizer';
 
 export class RegisterDeviceDto {
   @ApiProperty({
@@ -10,5 +11,7 @@ export class RegisterDeviceDto {
   })
   @IsString()
   @IsNotEmpty()
+  @Trim()
+  @Escape()
   fcmToken: string;
 }

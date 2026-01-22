@@ -1,4 +1,5 @@
 import { IsNotEmpty, IsString } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class GoogleMobileLoginDto {
@@ -8,5 +9,6 @@ export class GoogleMobileLoginDto {
   })
   @IsString()
   @IsNotEmpty()
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
   token: string;
 }

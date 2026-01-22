@@ -3,6 +3,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { Trim, Escape } from 'class-sanitizer';
 
 export class NewsQueryDto {
   @ApiPropertyOptional({
@@ -35,5 +36,7 @@ export class NewsQueryDto {
   })
   @IsString()
   @IsOptional()
+  @Trim()
+  @Escape()
   category?: string;
 }

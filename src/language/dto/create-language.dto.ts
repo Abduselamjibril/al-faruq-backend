@@ -10,6 +10,8 @@ export class CreateLanguageDto {
   })
   @IsString()
   @IsNotEmpty()
+  @Trim()
+  @Escape()
   name: string;
 
   @ApiProperty({
@@ -19,5 +21,7 @@ export class CreateLanguageDto {
   @IsString()
   @IsNotEmpty()
   @Length(2, 10)
+  @Trim()
+  @Escape()
   code: string;
 }

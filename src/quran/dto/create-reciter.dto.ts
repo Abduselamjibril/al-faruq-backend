@@ -10,6 +10,8 @@ export class CreateReciterDto {
   })
   @IsString()
   @IsNotEmpty()
+  @Trim()
+  @Escape()
   name: string;
 
   @ApiProperty({

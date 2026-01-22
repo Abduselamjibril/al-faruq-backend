@@ -2,6 +2,7 @@
 
 import { ApiProperty } from '@nestjs/swagger';
 import { IsNotEmpty, IsString, IsArray, ArrayNotEmpty } from 'class-validator';
+import { Trim, Escape } from 'class-sanitizer';
 
 export class CreateRoleDto {
   @ApiProperty({
@@ -10,6 +11,8 @@ export class CreateRoleDto {
   })
   @IsString()
   @IsNotEmpty()
+  @Trim()
+  @Escape()
   name: string;
 
   @ApiProperty({
@@ -21,5 +24,7 @@ export class CreateRoleDto {
   @IsArray()
   @ArrayNotEmpty()
   @IsString({ each: true })
+  @Trim({ each: true })
+  @Escape({ each: true })
   permissions: string[];
 }

@@ -2,6 +2,7 @@
 
 import { ApiProperty } from '@nestjs/swagger';
 import { IsNotEmpty, IsString, IsUrl } from 'class-validator';
+import { Trim, Escape } from 'class-sanitizer';
 
 export class CreateNewsDto {
   @ApiProperty({
@@ -10,6 +11,8 @@ export class CreateNewsDto {
   })
   @IsString()
   @IsNotEmpty()
+  @Trim()
+  @Escape()
   title: string;
 
   @ApiProperty({
@@ -26,6 +29,8 @@ export class CreateNewsDto {
   })
   @IsString()
   @IsNotEmpty()
+  @Trim()
+  @Escape()
   author: string;
 
   @ApiProperty({
@@ -34,6 +39,8 @@ export class CreateNewsDto {
   })
   @IsString()
   @IsNotEmpty()
+  @Trim()
+  @Escape()
   category: string;
 
   @ApiProperty({
@@ -42,5 +49,7 @@ export class CreateNewsDto {
   })
   @IsString()
   @IsNotEmpty()
+  @Trim()
+  @Escape()
   description: string;
 }

@@ -1,4 +1,5 @@
 import { IsNotEmpty, IsString } from 'class-validator';
+import { Trim, Escape } from 'class-sanitizer';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateTermsOfServiceDto {
@@ -8,6 +9,8 @@ export class CreateTermsOfServiceDto {
   })
   @IsString()
   @IsNotEmpty()
+  @Trim()
+  @Escape()
   version: string;
 
   @ApiProperty({
@@ -16,5 +19,7 @@ export class CreateTermsOfServiceDto {
   })
   @IsString()
   @IsNotEmpty()
+  @Trim()
+  @Escape()
   content: string;
 }

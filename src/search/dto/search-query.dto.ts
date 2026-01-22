@@ -1,6 +1,7 @@
 // src/search/dto/search-query.dto.ts
 
 import { IsEnum, IsNotEmpty, IsString, MinLength } from 'class-validator';
+import { Trim, Escape } from 'class-sanitizer';
 import { ApiProperty } from '@nestjs/swagger';
 
 export enum SearchType {
@@ -29,6 +30,8 @@ export class SearchQueryDto {
   @IsString()
   @IsNotEmpty()
   @MinLength(2)
+  @Trim()
+  @Escape()
   query: string;
 
   @ApiProperty({
