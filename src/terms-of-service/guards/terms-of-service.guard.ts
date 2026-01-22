@@ -33,25 +33,30 @@ export class TermsOfServiceGuard implements CanActivate {
       return true;
     }
 
-    // Is there a mandatory ToS to check against?
-    const mandatoryTos = await this.tosService.findActiveMandatory();
-    if (!mandatoryTos) {
-      return true; // No mandatory ToS exists, so all users are compliant.
-    }
+      // Only enforce ToS acceptance for USER role; other roles bypass
+      if (!user.roles?.includes(RoleName.USER)) {
+        return true;
+      }
 
-    // Has this user accepted this specific mandatory ToS?
-    const hasAccepted = await this.tosService.hasUserAccepted(
-      user.id,
-      mandatoryTos.id,
-    );
-    if (hasAccepted) {
-      return true; // User has accepted, allow the request.
-    }
+      // Is there a mandatory ToS to check against?
+      const mandatoryTos = await this.tosService.findActiveMandatory();
+      if (!mandatoryTos) {
+        return true; // No mandatory ToS exists, so all users are compliant.
+      }
 
-    // If we reach here, the user has not accepted. Block access.
-    throw new ForbiddenException({
-      message: 'You must accept the latest Terms of Service to continue.',
-      errorCode: 'TOS_NOT_ACCEPTED',
-    });
+      // Has this user accepted this specific mandatory ToS?
+      const hasAccepted = await this.tosService.hasUserAccepted(
+        user.id,
+        mandatoryTos.id,
+      );
+      if (hasAccepted) {
+        return true; // User has accepted, allow the request.
+      }
+
+      // If we reach here, the user has not accepted. Block access.
+      throw new ForbiddenException({
+        message: 'You must accept the latest Terms of Service to continue.',
+        errorCode: 'TOS_NOT_ACCEPTED',
+      });
   }
 }

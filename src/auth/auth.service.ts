@@ -28,6 +28,7 @@ import { ChangeAdminCredentialsDto } from './dto/change-admin-credentials.dto';
 import { DevicesService } from '../devices/devices.service';
 import { SetPasswordDto } from './dto/set-password.dto';
 import { PrivacyPolicyService } from '../privacy-policy/privacy-policy.service';
+import { TermsOfServiceService } from '../terms-of-service/terms-of-service.service';
 
 export interface SocialProfile {
   provider: 'google' | 'facebook';
@@ -50,6 +51,7 @@ export class AuthService {
     private devicesService: DevicesService,
     private configService: ConfigService,
     private readonly privacyPolicyService: PrivacyPolicyService,
+    private readonly tosService: TermsOfServiceService,
     @InjectRepository(UserSession)
     private userSessionRepository: Repository<UserSession>,
     @InjectRepository(User)
@@ -304,13 +306,27 @@ export class AuthService {
     }
 
     const isAdmin = user.roles.some((role) => role.name === RoleName.ADMIN);
-    const mandatoryPolicy = await this.privacyPolicyService.getCurrentMandatoryPolicy();
-    let requiresAcceptance = false;
-    if (mandatoryPolicy && !isAdmin) {
-      requiresAcceptance = !(await this.privacyPolicyService.hasUserAcceptedPolicy(
-        user.id,
-        mandatoryPolicy.id,
-      ));
+
+    // Only enforce acceptance flags for USER role (others, including admins, get false)
+    let requiresPolicyAcceptance = false;
+    let requiresTosAcceptance = false;
+
+    if (isUserRole && !isAdmin) {
+      const mandatoryPolicy = await this.privacyPolicyService.getCurrentMandatoryPolicy();
+      if (mandatoryPolicy) {
+        requiresPolicyAcceptance = !(await this.privacyPolicyService.hasUserAcceptedPolicy(
+          user.id,
+          mandatoryPolicy.id,
+        ));
+      }
+
+      const mandatoryTos = await this.tosService.findActiveMandatory();
+      if (mandatoryTos) {
+        requiresTosAcceptance = !(await this.tosService.hasUserAccepted(
+          user.id,
+          mandatoryTos.id,
+        ));
+      }
     }
 
     const session = this.userSessionRepository.create({
@@ -331,15 +347,16 @@ export class AuthService {
       sub: user.id,
       roles: user.roles.map((role) => role.name),
       permissions: uniquePermissions,
+      // Put acceptance checkers inside JWT: false if accepted, true if not accepted
+      privacy_policy_required: requiresPolicyAcceptance,
+      terms_of_service_required: requiresTosAcceptance,
     };
 
     return {
       access_token: this.jwtService.sign(payload),
       message: 'Login successful',
       sessionId: session.id,
-      requires_policy_acceptance: requiresAcceptance,
-      policy_version: requiresAcceptance && mandatoryPolicy ? mandatoryPolicy.version : null,
-      policy_url: requiresAcceptance && mandatoryPolicy ? mandatoryPolicy.documentUrl : null,
+      // Removed legacy acceptance response fields; now embedded in JWT payload
     };
   }
 
