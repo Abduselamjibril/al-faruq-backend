@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { TermsOfServiceService } from '../terms-of-service.service';
+import { RoleName } from '../../roles/entities/role.entity';
 import { SKIP_TOS_CHECK_KEY } from '../decorators/skip-tos-check.decorator';
 
 @Injectable()
