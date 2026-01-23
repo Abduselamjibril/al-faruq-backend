@@ -14,6 +14,7 @@ import {
   Query,
   Res,
   Req,
+  Logger,
 } from '@nestjs/common';
 import { PurchaseService } from './purchase.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -42,6 +43,8 @@ export const GetUser = createParamDecorator(
 @ApiTags('Purchase (User-Facing)')
 @Controller('purchase')
 export class PurchaseController {
+  private readonly logger = new Logger(PurchaseController.name);
+
   constructor(private readonly purchaseService: PurchaseService) {}
 
   @Post('initiate')
@@ -65,32 +68,24 @@ export class PurchaseController {
   @Get('verify-redirect')
   @ApiOperation({ summary: 'Handle Chapa return, verify transaction, and Auto-Redirect to App' })
   async verifyAndRedirect(@Query('tx_ref') tx_ref: string, @Res() res: Response) {
-    let isSuccess = false;
-    if (tx_ref) {
-      isSuccess = await this.purchaseService.verifyAndGrantAccess({ tx_ref });
+    if (!tx_ref) {
+      this.logger.warn('[verify-redirect] Missing tx_ref');
+      return res.status(400).json({ message: 'Missing tx_ref' });
     }
+
+    this.logger.log(`[verify-redirect] Received tx_ref=${tx_ref}`);
+
+    const isSuccess = await this.purchaseService.verifyAndGrantAccess({ tx_ref });
+    this.logger.log(`[verify-redirect] Verification result for ${tx_ref}: ${isSuccess ? 'success' : 'failed'}`);
+
     const successUrl = process.env.FLUTTER_RETURN_URL || 'app://alfaruq/purchase-success';
     const failedUrl = process.env.FLUTTER_FAILED_URL || 'app://alfaruq/purchase-failed';
-    const targetUrl = isSuccess ? successUrl : failedUrl;
+    const targetBase = isSuccess ? successUrl : failedUrl;
+    const targetUrl = `${targetBase}${targetBase.includes('?') ? '&' : '?'}status=${isSuccess ? 'success' : 'failed'}&tx_ref=${encodeURIComponent(tx_ref)}`;
 
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-          <title>${isSuccess ? 'Payment Successful' : 'Payment Failed'}</title>
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <script>
-              window.location.href = "${targetUrl}";
-          </script>
-      </head>
-      <body>
-        <p style="text-align: center; margin-top: 50px;">
-           ${isSuccess ? 'Redirecting to App...' : 'Payment Failed. Redirecting...'}
-        </p>
-      </body>
-      </html>
-    `;
-    res.send(html);
+    this.logger.log(`[verify-redirect] Redirecting to ${targetUrl}`);
+
+    return res.redirect(targetUrl);
   }
 
   @ApiExcludeEndpoint()
