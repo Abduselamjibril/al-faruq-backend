@@ -2,6 +2,7 @@
 
 import { ApiProperty } from '@nestjs/swagger';
 import { TransactionDetailDto } from './transaction-detail.dto';
+import { PaginationMetaDto } from '../../utils/pagination.dto';
 
 class ReportSummary {
   @ApiProperty()
@@ -21,6 +22,9 @@ class ReportSummary {
 export class TransactionReportDto {
   @ApiProperty({ type: ReportSummary })
   summary: ReportSummary;
+
+  @ApiProperty({ type: () => PaginationMetaDto })
+  meta: PaginationMetaDto;
 
   @ApiProperty({ type: [TransactionDetailDto] })
   transactions: TransactionDetailDto[];

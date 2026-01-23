@@ -221,20 +221,42 @@ export class ReportsService {
   async getTransactionReport(
     startDate: string,
     endDate: string,
+    page = 1,
+    limit = 20,
   ): Promise<TransactionReportDto> {
-    const transactions = await this.purchaseRepository.find({
-      where: {
-        createdAt: Between(new Date(startDate), new Date(endDate)),
-      },
-      relations: ['user', 'content'],
-      order: { createdAt: 'DESC' },
-    });
+    const pageNumber = page ?? 1;
+    const limitNumber = limit ?? 20;
 
-    let totalRevenue = 0;
+    const baseQuery = this.purchaseRepository
+      .createQueryBuilder('purchase')
+      .where('purchase.createdAt BETWEEN :start AND :end', {
+        start: new Date(startDate),
+        end: new Date(endDate),
+      });
+
+    const totalItems = await baseQuery.clone().getCount();
+
+    const totals = await baseQuery
+      .clone()
+      .select('COALESCE(SUM(purchase.grossAmount), 0)', 'totalRevenue')
+      .addSelect('COALESCE(SUM(purchase.netAmountForSplit), 0)', 'totalNetForSplit')
+      .getRawOne<{ totalRevenue: string; totalNetForSplit: string }>();
+
+    const transactions = await baseQuery
+      .clone()
+      .leftJoinAndSelect('purchase.user', 'user')
+      .leftJoinAndSelect('purchase.content', 'content')
+      .orderBy('purchase.createdAt', 'DESC')
+      .skip((pageNumber - 1) * limitNumber)
+      .take(limitNumber)
+      .getMany();
+
+    const totalRevenue = parseFloat(totals?.totalRevenue ?? '0');
+    const totalNetForSplit = parseFloat(totals?.totalNetForSplit ?? '0');
+
     const transactionDetails = transactions.map((tx) => {
       const amountPaid = parseFloat(tx.grossAmount.toString());
       const netForSplit = parseFloat(tx.netAmountForSplit.toString());
-      totalRevenue += amountPaid;
 
       return {
         purchaseId: tx.id,
@@ -254,20 +276,24 @@ export class ReportsService {
       };
     });
 
-    const totalNetForSplit = transactions.reduce(
-      (sum, tx) => sum + parseFloat(tx.netAmountForSplit.toString()),
-      0,
-    );
+    const meta = new PaginationMetaDto({
+      itemCount: transactionDetails.length,
+      totalItems,
+      itemsPerPage: limitNumber,
+      totalPages: Math.ceil(totalItems / limitNumber) || 1,
+      currentPage: pageNumber,
+    });
 
     return {
       summary: {
         startDate,
         endDate,
         totalRevenue,
-        totalTransactions: transactions.length,
+        totalTransactions: totalItems,
         alFaruqShare: totalNetForSplit * this.ALFARUQ_SHARE_PERCENTAGE,
         skylinkShare: totalNetForSplit * this.SKYLINK_SHARE_PERCENTAGE,
       },
+      meta,
       transactions: transactionDetails,
     };
   }
