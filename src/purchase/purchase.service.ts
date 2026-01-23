@@ -42,6 +42,7 @@ export class PurchaseService {
   private readonly logger = new Logger(PurchaseService.name);
   private readonly chapaSecretKey: string;
   private readonly apiDomain: string;
+  private readonly apiPrefix: string;
   private readonly skylinkSubaccountId: string;
   private readonly skylinkSplitPercentage: number;
   private readonly vatPercentage: number;
@@ -70,6 +71,7 @@ export class PurchaseService {
     );
     const secretKey = this.configService.get<string>('CHAPA_SECRET_KEY');
     const domain = this.configService.get<string>('API_DOMAIN');
+    const apiPrefix = this.configService.get<string>('API_PREFIX') || 'api';
     const subaccountId = this.configService.get<string>(
       'SKYLINK_CHAPA_SUBACCOUNT_ID',
     );
@@ -93,7 +95,8 @@ export class PurchaseService {
     }
 
     this.chapaSecretKey = secretKey;
-    this.apiDomain = domain;
+    this.apiDomain = domain.replace(/\/$/, '');
+    this.apiPrefix = apiPrefix.replace(/^\/+|\/+$/g, '');
     this.skylinkSubaccountId = subaccountId;
     this.skylinkSplitPercentage = splitPercentage;
     this.vatPercentage = vat / 100; // Convert to decimal e.g., 15 -> 0.15
@@ -170,8 +173,9 @@ export class PurchaseService {
       transaction_charge_type: 'percentage',
       transaction_charge: transactionCharge,
     };
-    const httpsReturnUrl = `${this.apiDomain}/purchase/verify-redirect?tx_ref=${tx_ref}`;
-    const webhookUrl = `${this.apiDomain}/purchase/chapa-webhook`;
+    const apiBaseUrl = `${this.apiDomain}/${this.apiPrefix}`;
+    const httpsReturnUrl = `${apiBaseUrl}/purchase/verify-redirect?tx_ref=${tx_ref}`;
+    const webhookUrl = `${apiBaseUrl}/purchase/chapa-webhook`;
 
     const chapaRequestBody: any = {
       amount: grossAmountToCharge.toFixed(2), // Send the final calculated amount
