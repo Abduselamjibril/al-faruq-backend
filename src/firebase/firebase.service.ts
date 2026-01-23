@@ -8,6 +8,7 @@ import { resolve } from 'path';
 export interface NotificationPayload {
   title: string;
   body: string;
+  image?: string;
 }
 
 @Injectable()
@@ -50,6 +51,7 @@ export class FirebaseService implements OnModuleInit {
   async sendMulticastNotification(
     tokens: string[],
     payload: NotificationPayload,
+    data?: Record<string, string>,
   ): Promise<string[]> {
     if (tokens.length === 0) {
       return [];
@@ -60,9 +62,9 @@ export class FirebaseService implements OnModuleInit {
       notification: {
         title: payload.title,
         body: payload.body,
+        imageUrl: payload.image,
       },
-      // You can also add 'data' for silent notifications
-      // data: { ... }
+      data,
     };
 
     const staleTokens: string[] = [];

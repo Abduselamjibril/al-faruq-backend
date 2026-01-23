@@ -13,6 +13,16 @@ import {
   PaginationResponseDto,
 } from '../utils/pagination.dto';
 
+interface ContentPublishedPayload {
+  contentId: string;
+  title: string;
+  thumbnailUrl?: string | null;
+  deeplink: string;
+  webUrl?: string;
+  season?: number;
+  episode?: number;
+}
+
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
@@ -25,6 +35,18 @@ export class NotificationsService {
     private readonly devicesService: DevicesService,
     private readonly firebaseService: FirebaseService,
   ) {}
+
+  private formatEpisodeLabel(season?: number, episode?: number): string {
+    if (!season || !episode) return '';
+    const s = season.toString().padStart(2, '0');
+    const e = episode.toString().padStart(2, '0');
+    return `S${s} E${e}`;
+  }
+
+  private buildBody(title: string, season?: number, episode?: number): string {
+    const ep = this.formatEpisodeLabel(season, episode);
+    return ep ? `${title} — ${ep} is now live` : `${title} is now live`;
+  }
 
   async getNotificationsForUser(
     userId: string,
@@ -159,6 +181,59 @@ export class NotificationsService {
     });
     await this.notificationRepository.save(newNotification);
     this.logger.log('Broadcast notification process completed.');
+  }
+
+  async sendContentPublishedNotification(
+    payload: ContentPublishedPayload,
+  ): Promise<void> {
+    const tokens = await this.devicesService.findAllTokens();
+    if (tokens.length === 0) {
+      this.logger.warn('No device tokens found. Skipping content publish push.');
+      return;
+    }
+
+    const body = this.buildBody(payload.title, payload.season, payload.episode);
+    const title = 'New drop alert';
+
+    const data: Record<string, string> = {
+      contentId: payload.contentId,
+      deeplink: payload.deeplink,
+    };
+    if (payload.webUrl) data.webUrl = payload.webUrl;
+    if (payload.season) data.season = payload.season.toString();
+    if (payload.episode) data.episode = payload.episode.toString();
+
+    const tokenChunks: string[][] = [];
+    for (let i = 0; i < tokens.length; i += 500) {
+      tokenChunks.push(tokens.slice(i, i + 500));
+    }
+
+    let allStaleTokens: string[] = [];
+    for (const chunk of tokenChunks) {
+      const stale = await this.firebaseService.sendMulticastNotification(
+        chunk,
+        {
+          title,
+          body,
+          image: payload.thumbnailUrl ?? undefined,
+        },
+        data,
+      );
+      if (stale.length) {
+        allStaleTokens = allStaleTokens.concat(stale);
+      }
+    }
+
+    if (allStaleTokens.length) {
+      await this.devicesService.deleteTokens(allStaleTokens);
+    }
+
+    const newNotification = this.notificationRepository.create({
+      title,
+      message: body,
+    });
+    await this.notificationRepository.save(newNotification);
+    this.logger.log(`Content publish push sent for content ${payload.contentId}`);
   }
 
   async getHistory(): Promise<Notification[]> {

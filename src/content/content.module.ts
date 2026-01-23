@@ -8,11 +8,13 @@ import { ContentController } from './content.controller';
 import { Language } from './entities/language.entity';
 import { ContentPricing } from './entities/content-pricing.entity';
 import { UsersModule } from '../users/users.module'; // --- [NEW] IMPORT ---
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Content, ContentPricing, Language]),
     UsersModule, // --- [NEW] ADD THE MODULE HERE ---
+    NotificationsModule,
   ],
   controllers: [ContentController],
   providers: [ContentService],

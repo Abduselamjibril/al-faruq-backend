@@ -5,9 +5,10 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, Repository } from 'typeorm';
+import { Brackets, In, Repository } from 'typeorm';
 import {
   Content,
   ContentStatus,
@@ -27,9 +28,12 @@ import { User } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
 import { PERMISSIONS } from '../database/seed.service';
 import { RejectContentDto } from './dto/reject-content.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class ContentService {
+  private readonly logger = new Logger(ContentService.name);
+
   constructor(
     @InjectRepository(Content)
     private readonly contentRepository: Repository<Content>,
@@ -38,6 +42,7 @@ export class ContentService {
     @InjectRepository(Language)
     private readonly languageRepository: Repository<Language>,
     private readonly usersService: UsersService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async create(
@@ -75,8 +80,8 @@ export class ContentService {
     return this.contentRepository.save(newContent);
   }
 
-  findAllTopLevel(): Promise<Content[]> {
-    return this.contentRepository.find({
+  async findAllTopLevel(): Promise<Content[]> {
+    const contents = await this.contentRepository.find({
       where: [
         { type: ContentType.MOVIE },
         { type: ContentType.SERIES },
@@ -89,6 +94,9 @@ export class ContentService {
       relations: ['createdBy'],
       order: { createdAt: 'DESC' },
     });
+
+    await this.attachPricingForLocked(contents);
+    return contents;
   }
 
   async findOneWithHierarchy(id: string): Promise<Content> {
@@ -106,6 +114,7 @@ export class ContentService {
     if (!content) {
       throw new NotFoundException(`Content with ID ${id} not found.`);
     }
+    await this.attachPricingForLocked(content);
     return content;
   }
 
@@ -192,7 +201,9 @@ export class ContentService {
       );
     }
     content.status = ContentStatus.PUBLISHED;
-    return this.contentRepository.save(content);
+    const saved = await this.contentRepository.save(content);
+    await this.notifyContentPublished(saved);
+    return saved;
   }
 
   async rejectContent(
@@ -402,6 +413,26 @@ export class ContentService {
 
   // --- Private Helper Methods ---
 
+  private async notifyContentPublished(content: Content): Promise<void> {
+    // Defensive: do not block publish flow if notification fails.
+    try {
+      await this.notificationsService.sendContentPublishedNotification({
+        contentId: content.id,
+        title: content.title,
+        thumbnailUrl: content.thumbnailUrl,
+        deeplink: `alfaruq://feed/${content.id}`,
+        // webUrl is optional for mobile; keep for future fallback use.
+        webUrl: undefined,
+        season: undefined,
+        episode: undefined,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Failed to send publish notification for content ${content.id}: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+  }
+
   private async _findContentById(id: string): Promise<Content> {
     const content = await this.contentRepository.findOne({
       where: { id },
@@ -411,6 +442,47 @@ export class ContentService {
       throw new NotFoundException(`Content with ID ${id} not found.`);
     }
     return content;
+  }
+
+  private async attachPricingForLocked(target: Content | Content[]): Promise<void> {
+    const roots = Array.isArray(target) ? target : [target];
+    const lockedIds: string[] = [];
+
+    const collect = (node: Content): void => {
+      if (node.isLocked) {
+        lockedIds.push(node.id);
+      }
+      if (node.children?.length) {
+        node.children.forEach(collect);
+      }
+    };
+
+    roots.forEach(collect);
+    if (lockedIds.length === 0) {
+      return;
+    }
+
+    const tiers = await this.pricingRepository.find({
+      where: { contentId: In(lockedIds), isActive: true },
+    });
+
+    const pricingMap = new Map<string, ContentPricing[]>();
+    tiers.forEach((tier) => {
+      const list = pricingMap.get(tier.contentId) || [];
+      list.push(tier);
+      pricingMap.set(tier.contentId, list);
+    });
+
+    const apply = (node: Content): void => {
+      if (node.isLocked) {
+        node.pricingTiers = pricingMap.get(node.id) || [];
+      }
+      if (node.children?.length) {
+        node.children.forEach(apply);
+      }
+    };
+
+    roots.forEach(apply);
   }
 
   // --- [NEW] ---
