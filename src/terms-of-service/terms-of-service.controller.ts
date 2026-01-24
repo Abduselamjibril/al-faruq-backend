@@ -27,11 +27,15 @@ import { RolesGuard } from '../auth/guards/roles.guard'; // --- [FIXED] Use Role
 import { Roles } from '../auth/decorators/roles.decorator'; // --- [NEW] Import Roles decorator ---
 import { RoleName } from '../roles/entities/role.entity'; // --- [NEW] Import RoleName enum ---
 import { SkipTosCheck } from './decorators/skip-tos-check.decorator';
+import { AuthService } from '../auth/auth.service';
 
 @ApiTags('Terms of Service')
 @Controller('terms-of-service')
 export class TermsOfServiceController {
-  constructor(private readonly termsOfServiceService: TermsOfServiceService) {}
+  constructor(
+    private readonly termsOfServiceService: TermsOfServiceService,
+    private readonly authService: AuthService,
+  ) {}
 
   // =================================================================
   // == Public Endpoint                                           ==
@@ -60,20 +64,24 @@ export class TermsOfServiceController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Post('accept')
-  @HttpCode(HttpStatus.NO_CONTENT)
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Accept the latest mandatory Terms of Service',
     description:
       'A logged-in user calls this to record their acceptance of the latest mandatory ToS.',
   })
-  @ApiResponse({ status: 204, description: 'ToS accepted successfully.' })
+  @ApiResponse({ status: 200, description: 'ToS accepted successfully.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   async accept(@Req() req) {
     const userId = req.user.id;
     const activeTos = await this.termsOfServiceService.findActiveMandatory();
     if (activeTos) {
       await this.termsOfServiceService.accept(userId, activeTos.id);
+      return {
+        access_token: await this.authService.refreshAccessToken(userId),
+      };
     }
+    return { access_token: await this.authService.refreshAccessToken(userId) };
   }
 
   // =================================================================

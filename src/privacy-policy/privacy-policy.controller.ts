@@ -29,6 +29,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { PrivacyPolicyService } from './privacy-policy.service';
+import { AuthService } from '../auth/auth.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -47,7 +48,10 @@ import { PERMISSIONS } from '../database/seed.service';
 @ApiTags('Privacy Policy')
 @Controller('privacy-policy')
 export class PrivacyPolicyController {
-  constructor(private readonly privacyPolicyService: PrivacyPolicyService) {}
+  constructor(
+    private readonly privacyPolicyService: PrivacyPolicyService,
+    private readonly authService: AuthService,
+  ) {}
 
   // --- PUBLIC ENDPOINT ---
   @Public()
@@ -75,11 +79,12 @@ export class PrivacyPolicyController {
     @Body() acceptDto: AcceptPrivacyPolicyDto,
     @Ip() ipAddress: string,
   ) {
-    return this.privacyPolicyService.recordAcceptance(
-      user.id,
-      acceptDto,
-      ipAddress,
-    );
+    return this.privacyPolicyService
+      .recordAcceptance(user.id, acceptDto, ipAddress)
+      .then(async (acceptance) => ({
+        access_token: await this.authService.refreshAccessToken(user.id),
+        acceptance,
+      }));
   }
 
   // --- ADMIN ENDPOINTS ---

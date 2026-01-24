@@ -360,6 +360,62 @@ export class AuthService {
     };
   }
 
+  /**
+   * Re-compute acceptance flags and issue a fresh JWT without creating a new session.
+   * Use after Privacy/ToS acceptance so the client gets up-to-date flags.
+   */
+  async refreshAccessToken(userId: string): Promise<string> {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      relations: ['roles', 'roles.permissions'],
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const isUserRole = user.roles.some((role) => role.name === RoleName.USER);
+    const isAdmin = user.roles.some((role) => role.name === RoleName.ADMIN);
+
+    let requiresPolicyAcceptance = false;
+    let requiresTosAcceptance = false;
+
+    if (isUserRole && !isAdmin) {
+      const mandatoryPolicy = await this.privacyPolicyService.getCurrentMandatoryPolicy();
+      if (mandatoryPolicy) {
+        requiresPolicyAcceptance = !(await this.privacyPolicyService.hasUserAcceptedPolicy(
+          user.id,
+          mandatoryPolicy.id,
+        ));
+      }
+
+      const mandatoryTos = await this.tosService.findActiveMandatory();
+      if (mandatoryTos) {
+        requiresTosAcceptance = !(await this.tosService.hasUserAccepted(
+          user.id,
+          mandatoryTos.id,
+        ));
+      }
+    }
+
+    const permissions = user.roles.reduce((acc, role) => {
+      const rolePermissions = role.permissions ? role.permissions.map((p) => p.name) : [];
+      return [...acc, ...rolePermissions];
+    }, [] as string[]);
+    const uniquePermissions = [...new Set(permissions)];
+
+    const payload = {
+      email: user.email,
+      sub: user.id,
+      roles: user.roles.map((role) => role.name),
+      permissions: uniquePermissions,
+      privacy_policy_required: requiresPolicyAcceptance,
+      terms_of_service_required: requiresTosAcceptance,
+    };
+
+    return this.jwtService.sign(payload);
+  }
+
   async checkDeviceLimit(userId: string): Promise<void> {
     const deviceCount = await this.devicesService.countByUserId(userId);
     if (deviceCount >= 3) {
