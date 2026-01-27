@@ -1,6 +1,8 @@
 // src/app.module.ts
 
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import { PolicyTosAcceptanceGuard } from './common/guards/policy-tos-acceptance.guard';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ServeStaticModule } from '@nestjs/serve-static';
@@ -111,6 +113,12 @@ import { redisStore } from 'cache-manager-redis-store';
     YoutubeModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: PolicyTosAcceptanceGuard,
+    },
+  ],
 })
 export class AppModule {}

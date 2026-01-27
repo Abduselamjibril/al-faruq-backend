@@ -34,6 +34,14 @@ export class PrivacyPolicyService {
     private readonly usersService: UsersService,
   ) {}
 
+  /**
+   * Creates a new privacy policy version, uploads its document,
+   * and handles setting it as active/mandatory atomically.
+   * @param createDto - DTO with policy details.
+   * @param file - The PDF document file.
+   * @param adminId - The ID of the admin user creating the policy.
+   * @returns The newly created PrivacyPolicy entity.
+   */
   async create(
     createDto: CreatePrivacyPolicyDto,
     file: Express.Multer.File,
@@ -99,6 +107,10 @@ export class PrivacyPolicyService {
     }
   }
 
+  /**
+   * Retrieves all privacy policies, intended for an admin view.
+   * @returns A list of all PrivacyPolicy entities, sorted by version descending.
+   */
   async findAllForAdmin(): Promise<PrivacyPolicy[]> {
     return this.privacyPolicyRepository.find({
       order: {
@@ -107,6 +119,12 @@ export class PrivacyPolicyService {
     });
   }
 
+  /**
+   * Sets a specific policy's `isActive` status. Ensures only one can be active at a time.
+   * @param policyId - The ID of the policy to update.
+   * @param isActive - The new activation status.
+   * @returns The updated PrivacyPolicy entity.
+   */
   async updateActivationStatus(
     policyId: number,
     isActive: boolean,
@@ -114,6 +132,12 @@ export class PrivacyPolicyService {
     return this._updatePolicyStatus(policyId, 'isActive', isActive);
   }
 
+  /**
+   * Sets a specific policy's `isMandatory` status. Ensures only one can be mandatory at a time.
+   * @param policyId - The ID of the policy to update.
+   * @param isMandatory - The new mandatory status.
+   * @returns The updated PrivacyPolicy entity.
+   */
   async updateMandatoryStatus(
     policyId: number,
     isMandatory: boolean,
@@ -121,11 +145,17 @@ export class PrivacyPolicyService {
     return this._updatePolicyStatus(policyId, 'isMandatory', isMandatory);
   }
 
+  /**
+   * Retrieves a paginated list of users who have accepted a specific policy.
+   * @param policyId - The ID of the policy.
+   * @param paginationDto - DTO for pagination parameters (page, limit).
+   * @returns A paginated response of user acceptances.
+   */
   async getAcceptancesForPolicy(
     policyId: number,
     paginationDto: PaginationQueryDto,
   ): Promise<PaginationResponseDto<UserPrivacyPolicyAcceptance>> {
-    await this._findPolicyById(policyId);
+    await this._findPolicyById(policyId); // Ensures policy exists
 
     const { page = 1, limit = 10 } = paginationDto;
     const skip = (page - 1) * limit;
@@ -151,6 +181,13 @@ export class PrivacyPolicyService {
     });
   }
 
+  /**
+   * Records a user's acceptance of the current mandatory privacy policy.
+   * @param userId - The ID of the accepting user.
+   * @param acceptDto - DTO containing device information.
+   * @param ipAddress - The IP address from which the acceptance was made.
+   * @returns The newly created UserPrivacyPolicyAcceptance entity.
+   */
   async recordAcceptance(
     userId: string,
     acceptDto: AcceptPrivacyPolicyDto,
@@ -182,6 +219,10 @@ export class PrivacyPolicyService {
     return this.acceptanceRepository.save(acceptance);
   }
 
+  /**
+   * Finds the single policy that is both active and mandatory.
+   * @returns The current mandatory PrivacyPolicy entity or null if none exists.
+   */
   async getCurrentMandatoryPolicy(): Promise<PrivacyPolicy | null> {
     return this.privacyPolicyRepository.findOne({
       where: {
@@ -191,6 +232,12 @@ export class PrivacyPolicyService {
     });
   }
 
+  /**
+   * Checks if a specific user has accepted a specific policy version.
+   * @param userId - The ID of the user.
+   * @param policyId - The ID of the policy.
+   * @returns A boolean indicating if the user has accepted.
+   */
   async hasUserAcceptedPolicy(
     userId: string,
     policyId: number,
@@ -203,7 +250,25 @@ export class PrivacyPolicyService {
     });
     return count > 0;
   }
+  
+  /**
+   * Checks if the user has accepted the latest mandatory privacy policy.
+   * @param userId - The ID of the user to check.
+   * @returns `true` if the user has accepted, or if no mandatory policy exists. `false` otherwise.
+   */
+  async hasAcceptedLatest(userId: string): Promise<boolean> {
+    const mandatoryPolicy = await this.getCurrentMandatoryPolicy();
+    if (!mandatoryPolicy) {
+      return true; // No mandatory policy, so nothing to accept
+    }
+    return this.hasUserAcceptedPolicy(userId, mandatoryPolicy.id);
+  }
 
+  /**
+   * Determines if a user needs to accept the current mandatory policy.
+   * @param userId - The ID of the user.
+   * @returns `true` if there is a mandatory policy they have not accepted, `false` otherwise.
+   */
   async checkIfAcceptanceIsRequired(userId: string): Promise<boolean> {
     const mandatoryPolicy = await this.getCurrentMandatoryPolicy();
     if (!mandatoryPolicy) {
@@ -216,6 +281,10 @@ export class PrivacyPolicyService {
     return !hasAccepted;
   }
 
+  /**
+   * Retrieves the current publicly active policy for display purposes.
+   * @returns The active PrivacyPolicy entity.
+   */
   async getPubliclyActivePolicy(): Promise<PrivacyPolicy> {
     const activePolicy = await this.privacyPolicyRepository.findOne({
       where: { isActive: true },
@@ -226,6 +295,11 @@ export class PrivacyPolicyService {
     return activePolicy;
   }
 
+  /**
+   * Finds a policy by its ID or throws a NotFoundException.
+   * @param policyId - The ID of the policy to find.
+   * @returns The PrivacyPolicy entity.
+   */
   private async _findPolicyById(policyId: number): Promise<PrivacyPolicy> {
     const policy = await this.privacyPolicyRepository.findOneBy({ id: policyId });
     if (!policy) {
@@ -234,6 +308,15 @@ export class PrivacyPolicyService {
     return policy;
   }
 
+  /**
+   * A generic helper to update a policy's status field (`isActive` or `isMandatory`).
+   * Uses a transaction to ensure that if a new policy is being set to `true`,
+   * all other policies have that same field set to `false`.
+   * @param policyId - The ID of the policy to update.
+   * @param statusField - The name of the field to update ('isActive' or 'isMandatory').
+   * @param value - The new boolean value for the field.
+   * @returns The updated PrivacyPolicy entity.
+   */
   private async _updatePolicyStatus(
     policyId: number,
     statusField: 'isActive' | 'isMandatory',
@@ -241,11 +324,13 @@ export class PrivacyPolicyService {
   ): Promise<PrivacyPolicy> {
     const policy = await this._findPolicyById(policyId);
     if (policy[statusField] === value) {
-      return policy;
+      return policy; // No change needed
     }
+
     try {
       return await this.privacyPolicyRepository.manager.transaction(
         async (transactionalEntityManager) => {
+          // If setting to true, first set all others to false for this field
           if (value === true) {
             await transactionalEntityManager.update(
               PrivacyPolicy,
@@ -253,6 +338,7 @@ export class PrivacyPolicyService {
               { [statusField]: false },
             );
           }
+          // Now update the target policy
           policy[statusField] = value;
           return await transactionalEntityManager.save(policy);
         },

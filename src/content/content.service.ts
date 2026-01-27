@@ -80,8 +80,11 @@ export class ContentService {
     return this.contentRepository.save(newContent);
   }
 
-  async findAllTopLevel(): Promise<Content[]> {
-    const contents = await this.contentRepository.find({
+  async findAllTopLevelPaginated(
+    paginationQuery: import('../utils/pagination-query.dto').PaginationQueryDto
+  ) {
+    const { page = 1, limit = 10 } = paginationQuery;
+    const [contents, total] = await this.contentRepository.findAndCount({
       where: [
         { type: ContentType.MOVIE },
         { type: ContentType.SERIES },
@@ -93,10 +96,19 @@ export class ContentService {
       ],
       relations: ['createdBy'],
       order: { createdAt: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
     });
 
     await this.attachPricingForLocked(contents);
-    return contents;
+    const meta = new (require('../utils/pagination.dto').PaginationMetaDto)({
+      totalItems: total,
+      itemCount: contents.length,
+      itemsPerPage: limit,
+      totalPages: Math.ceil(total / limit),
+      currentPage: page,
+    });
+    return new (require('../utils/pagination.dto').PaginationResponseDto)(contents, meta);
   }
 
   async findOneWithHierarchy(id: string): Promise<Content> {
