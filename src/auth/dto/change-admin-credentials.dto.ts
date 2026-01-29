@@ -6,6 +6,16 @@ import { IsStrongPassword } from '../decorators/is-strong-password.decorator';
 
 export class ChangeAdminCredentialsDto {
   @ApiPropertyOptional({
+    description: 'Current password (required to change email or password)',
+    example: 'CurrentP@ssword123',
+  })
+  @IsOptional()
+  @IsString()
+  @Trim()
+  @Escape()
+  currentPassword?: string;
+
+  @ApiPropertyOptional({
     description: "Admin's new email address",
     example: 'new.admin@example.com',
   })
@@ -22,7 +32,9 @@ export class ChangeAdminCredentialsDto {
   @IsOptional()
   @IsString()
   @MinLength(8, { message: 'Password must be at least 8 characters long' })
-  @IsStrongPassword({ message: 'Password must include uppercase, lowercase, number, and special character.' })
+  @IsStrongPassword({
+    message: 'Password must include uppercase, lowercase, number, and special character.',
+  })
   @Trim()
   @Escape()
   newPassword?: string;
@@ -33,7 +45,6 @@ export class ChangeAdminCredentialsDto {
   })
   @IsOptional()
   @IsString()
-  @IsStrongPassword({ message: 'Password must include uppercase, lowercase, number, and special character.' })
   @Match('newPassword', { message: 'Passwords do not match' })
   @Trim()
   @Escape()

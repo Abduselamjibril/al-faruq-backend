@@ -510,13 +510,27 @@ export class AuthService {
     adminId: string,
     changeDto: ChangeAdminCredentialsDto,
   ): Promise<User> {
-    const { email, newPassword, confirmPassword } = changeDto;
+    const { email, newPassword, confirmPassword, currentPassword } = changeDto;
     const dataToUpdate: Partial<User> = {};
 
     if (!email && !newPassword) {
       throw new BadRequestException(
         'At least one field (email or newPassword) must be provided.',
       );
+    }
+
+    // Require currentPassword for any change
+    if (!currentPassword) {
+      throw new BadRequestException('Current password is required to change credentials.');
+    }
+
+    const user = await this.usersService.findById(adminId);
+    if (!user || !user.password) {
+      throw new BadRequestException('User not found or password not set.');
+    }
+    const passwordValid = await bcrypt.compare(currentPassword, user.password);
+    if (!passwordValid) {
+      throw new BadRequestException('Current password is incorrect.');
     }
 
     if (newPassword) {
