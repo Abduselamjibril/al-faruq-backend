@@ -218,24 +218,20 @@ export class AuthController {
   }
 
   @Get('admin/profile')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(RoleName.ADMIN, RoleName.MODERATOR, RoleName.UPLOADER)
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: "Get the current admin portal user's profile" })
   @ApiResponse({ status: 200, description: 'Returns the profile.' })
-  @ApiResponse({ status: 403, description: 'Forbidden.' })
   getAdminProfile(@Request() req) {
     return this.usersService.findById(req.user.id);
   }
 
   @Patch('admin/change-credentials')
-  @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(PERMISSIONS.SETTINGS_MANAGE)
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: "Change the current admin's email or password (Admin Only)" })
+  @ApiOperation({ summary: "Change the current admin's email or password" })
   @ApiBody({ type: ChangeAdminCredentialsDto })
   @ApiResponse({ status: 200, description: 'Admin credentials updated successfully.' })
-  @ApiResponse({ status: 403, description: 'Forbidden. Missing permissions.' })
   @ApiResponse({ status: 409, description: 'New email is already in use.' })
   changeAdminCredentials(@Request() req, @Body() changeAdminCredentialsDto: ChangeAdminCredentialsDto) {
     return this.authService.changeAdminCredentials(req.user.id, changeAdminCredentialsDto);
