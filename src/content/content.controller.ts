@@ -56,15 +56,11 @@ export class ContentController {
 
   @Get()
   @Permissions(PERMISSIONS.CONTENT_MANAGE_ALL)
-  @ApiOperation({ summary: 'Get all top-level content items (Moderator, Admin) with pagination' })
-  @ApiResponse({ status: 200, description: 'Returns a paginated list of all top-level content.', schema: { $ref: '#/components/schemas/PaginationResponseDto' } })
+  @ApiOperation({ summary: 'Get all top-level content items (Moderator, Admin)' })
+  @ApiResponse({ status: 200, description: 'Returns an array of all top-level content.', type: [Content] })
   @ApiResponse({ status: 403, description: 'Forbidden. Missing permissions.' })
-  @ApiQuery({ name: 'page', required: false, type: Number, description: 'The page number to retrieve.' })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'The number of items to return per page.' })
-  findAllTopLevel(
-    @Query() paginationQuery: import('../utils/pagination-query.dto').PaginationQueryDto
-  ) {
-    return this.contentService.findAllTopLevelPaginated(paginationQuery);
+  findAllTopLevel() {
+    return this.contentService.findAllTopLevelPaginated();
   }
 
   @Get(':id')
