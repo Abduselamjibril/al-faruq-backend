@@ -27,7 +27,7 @@ import {
   ApiBody,
   ApiQuery,
 } from '@nestjs/swagger';
-import { Content } from './entities/content.entity';
+import { Content, ContentType } from './entities/content.entity';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { PERMISSIONS } from '../database/seed.service';
@@ -59,7 +59,7 @@ export class ContentController {
   @ApiOperation({ summary: 'Get all top-level content items (Moderator, Admin)' })
   @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
   @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page (default: 20)' })
-  @ApiQuery({ name: 'contentType', required: false, type: String, description: 'Filter by content type (e.g., MOVIE, SERIES, etc.)' })
+  @ApiQuery({ name: 'contentType', required: false, enum: ContentType, description: 'Filter by content type' })
   @ApiResponse({ status: 200, description: 'Returns a paginated array of all top-level content.', schema: { $ref: '#/components/schemas/PaginationResponseDto' } })
   @ApiResponse({ status: 403, description: 'Forbidden. Missing permissions.' })
   findAllTopLevel(
