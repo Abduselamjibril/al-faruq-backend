@@ -85,15 +85,17 @@ export class ContentService {
   ) {
     const { page = 1, limit = 10 } = paginationQuery;
     const [contents, total] = await this.contentRepository.findAndCount({
-      where: [
-        { type: ContentType.MOVIE },
-        { type: ContentType.SERIES },
-        { type: ContentType.MUSIC_VIDEO },
-        { type: ContentType.DAWAH },
-        { type: ContentType.DOCUMENTARY },
-        { type: ContentType.PROPHET_HISTORY },
-        { type: ContentType.BOOK },
-      ],
+      where: {
+        type: In([
+          ContentType.MOVIE,
+          ContentType.SERIES,
+          ContentType.MUSIC_VIDEO,
+          ContentType.DAWAH,
+          ContentType.DOCUMENTARY,
+          ContentType.PROPHET_HISTORY,
+          ContentType.BOOK,
+        ]),
+      },
       relations: ['createdBy'],
       order: { createdAt: 'DESC' },
       skip: (page - 1) * limit,
