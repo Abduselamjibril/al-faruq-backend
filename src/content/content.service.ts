@@ -1,3 +1,4 @@
+import { PaginationMetaDto, PaginationResponseDto } from '../utils/pagination.dto';
 // src/content/content.service.ts
 
 import {
@@ -99,7 +100,6 @@ export class ContentService {
       take: limit,
     });
     await this.attachPricingForLocked(contents);
-    const { PaginationMetaDto, PaginationResponseDto } = await import('../utils/pagination.dto');
     const meta = new PaginationMetaDto({
       itemCount: contents.length,
       totalItems: total,
