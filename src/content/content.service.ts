@@ -1,4 +1,5 @@
 import { PaginationMetaDto, PaginationResponseDto } from '../utils/pagination.dto';
+import { ContentType } from './entities/content.entity';
 // src/content/content.service.ts
 
 import {
@@ -81,18 +82,22 @@ export class ContentService {
     return this.contentRepository.save(newContent);
   }
 
-  async findAllTopLevelPaginated(page = 1, limit = 20) {
+  async findAllTopLevelPaginated(page = 1, limit = 20, contentType?: string) {
+    let typeFilter: ContentType[] = [
+      ContentType.MOVIE,
+      ContentType.SERIES,
+      ContentType.MUSIC_VIDEO,
+      ContentType.DAWAH,
+      ContentType.DOCUMENTARY,
+      ContentType.PROPHET_HISTORY,
+      ContentType.BOOK,
+    ];
+    if (contentType && Object.values(ContentType).includes(contentType as ContentType)) {
+      typeFilter = [contentType as ContentType];
+    }
     const [contents, total] = await this.contentRepository.findAndCount({
       where: {
-        type: In([
-          ContentType.MOVIE,
-          ContentType.SERIES,
-          ContentType.MUSIC_VIDEO,
-          ContentType.DAWAH,
-          ContentType.DOCUMENTARY,
-          ContentType.PROPHET_HISTORY,
-          ContentType.BOOK,
-        ]),
+        type: In(typeFilter),
       },
       relations: ['createdBy'],
       order: { createdAt: 'DESC' },
