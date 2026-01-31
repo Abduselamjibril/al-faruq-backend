@@ -1,5 +1,4 @@
 import { PaginationMetaDto, PaginationResponseDto } from '../utils/pagination.dto';
-import { ContentType } from './entities/content.entity';
 // src/content/content.service.ts
 
 import {
