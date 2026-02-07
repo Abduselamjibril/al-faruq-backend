@@ -30,6 +30,7 @@ import { UsersService } from '../users/users.service';
 import { PERMISSIONS } from '../database/seed.service';
 import { RejectContentDto } from './dto/reject-content.dto';
 import { NotificationsService } from '../notifications/notifications.service';
+import { UploadService } from '../upload/upload.service';
 
 @Injectable()
 export class ContentService {
@@ -44,6 +45,7 @@ export class ContentService {
     private readonly languageRepository: Repository<Language>,
     private readonly usersService: UsersService,
     private readonly notificationsService: NotificationsService,
+    private readonly uploadService: UploadService, // Inject UploadService
   ) {}
 
   async create(
@@ -184,6 +186,30 @@ export class ContentService {
     if (!content) {
       throw new NotFoundException(`Content with ID ${id} not found.`);
     }
+    // --- Delete associated files from Bunny.net Storage ---
+    const filesToDelete: string[] = [];
+    if (content.videoUrl) filesToDelete.push(content.videoUrl);
+    if (content.audioUrl) filesToDelete.push(content.audioUrl);
+    if (content.thumbnailUrl) filesToDelete.push(content.thumbnailUrl);
+    if (content.pdfUrl) filesToDelete.push(content.pdfUrl);
+    if (Array.isArray(content.media)) {
+      for (const mediaItem of content.media) {
+        if (mediaItem.url) filesToDelete.push(mediaItem.url);
+      }
+    }
+    for (const fileUrl of filesToDelete) {
+      try {
+        // Extract the storage path from the URL (after the domain)
+        const match = fileUrl.match(/https?:\/\/(?:[\w-]+\.)?([\w-]+)\.[\w.-]+\/(.+)/);
+        const storagePath = match ? match[2] : undefined;
+        if (storagePath) {
+          await (this.uploadService as any).uploadAdapter.deleteFile(storagePath);
+        }
+      } catch (err) {
+        this.logger.warn(`Failed to delete file from Bunny.net Storage: ${fileUrl}`);
+      }
+    }
+    // --- End file deletion ---
     await this.contentRepository.remove(content);
     return { message: 'Content successfully deleted.' };
   }

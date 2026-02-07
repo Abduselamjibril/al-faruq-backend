@@ -9,12 +9,14 @@ import { Language } from './entities/language.entity';
 import { ContentPricing } from './entities/content-pricing.entity';
 import { UsersModule } from '../users/users.module'; // --- [NEW] IMPORT ---
 import { NotificationsModule } from '../notifications/notifications.module';
+import { UploadModule } from '../upload/upload.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Content, ContentPricing, Language]),
     UsersModule, // --- [NEW] ADD THE MODULE HERE ---
     NotificationsModule,
+    UploadModule, // <-- Import UploadModule to provide UploadService
   ],
   controllers: [ContentController],
   providers: [ContentService],

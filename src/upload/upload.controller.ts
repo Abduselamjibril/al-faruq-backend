@@ -22,6 +22,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { UploadService } from './upload.service';
+import { BunnyUploadService } from './bunny-upload.service';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { PERMISSIONS } from '../database/seed.service';
@@ -32,7 +33,10 @@ import { PERMISSIONS } from '../database/seed.service';
 @Permissions(PERMISSIONS.UPLOAD_MEDIA)
 @Controller('upload')
 export class UploadController {
-  constructor(private readonly uploadService: UploadService) {}
+  constructor(
+    private readonly uploadService: UploadService,
+    private readonly bunnyUploadService: BunnyUploadService,
+  ) {}
 
   @Post('video')
   @ApiOperation({ summary: 'Upload a video file' })
@@ -64,11 +68,12 @@ export class UploadController {
     )
     file: Express.Multer.File,
   ) {
-    const result = await this.uploadService.uploadFile(file, 'video');
+    // Use BunnyUploadService for video uploads (Bunny.net Stream)
+    const result = await this.bunnyUploadService.uploadVideo(file);
     return {
       message: 'Video uploaded successfully to cloud',
-      url: result.url,
-      provider_id: result.provider_id,
+      url: result.hlsUrl, // Return only the HLS (.m3u8) URL for compatibility with Cloudinary
+      provider_id: result.videoId,
     };
   }
 
